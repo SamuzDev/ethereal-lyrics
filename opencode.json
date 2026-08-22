@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["README.md"],
+  "references": {
+    "graphify": {
+      "path": "graphify-out",
+      "description": "Knowledge graph of the codebase — use for architecture, relationships, and component queries"
+    }
+  }
+}
