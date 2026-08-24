@@ -121,7 +121,7 @@ install_pip() {
     
     # Clone repo
     echo -e "${DIM}Cloning repository...${NC}"
-    git clone --depth 1 https://github.com/samuz/ethereal-lyrics.git /tmp/ethereal-lyrics 2>/dev/null || {
+    git clone --depth 1 https://github.com/SamuzDev/ethereal-lyrics.git /tmp/ethereal-lyrics 2>/dev/null || {
         echo -e "${YELLOW}Repository not found on GitHub. Installing locally...${NC}"
         cp -r "$(dirname "$0")" /tmp/ethereal-lyrics
     }
@@ -156,7 +156,7 @@ install_global() {
     
     # Clone repo
     echo -e "${DIM}Cloning repository...${NC}"
-    git clone --depth 1 https://github.com/samuz/ethereal-lyrics.git /tmp/ethereal-lyrics 2>/dev/null || {
+    git clone --depth 1 https://github.com/SamuzDev/ethereal-lyrics.git /tmp/ethereal-lyrics 2>/dev/null || {
         echo -e "${YELLOW}Repository not found on GitHub. Installing locally...${NC}"
         cp -r "$(dirname "$0")" /tmp/ethereal-lyrics
     }

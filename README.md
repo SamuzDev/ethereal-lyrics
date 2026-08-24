@@ -30,13 +30,13 @@ https://private-user-images.githubusercontent.com/108047432/640066507-b70bee4d-2
 ### One-liner with curl
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/samuz/ethereal-lyrics/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash
 ```
 
 ### Or clone and install
 
 ```bash
-git clone https://github.com/samuz/ethereal-lyrics.git
+git clone https://github.com/SamuzDev/ethereal-lyrics.git
 cd ethereal-lyrics
 ./install.sh
 ```
@@ -65,11 +65,11 @@ source venv/bin/activate
 pip install -e .
 ```
 
-### 4. Configure Spotify (optional)
+### 4. Configure Spotify
 
 ```bash
 cp .env.example .env
-# Edit .env with your Spotify credentials
+# Edit .env with your Spotify credentials (required)
 ```
 
 ### 5. Run
@@ -94,10 +94,10 @@ python -m src.main
 
 ## Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (required):
 
 ```env
-# Spotify API (optional - for web playback detection)
+# Spotify API (required)
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
 SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
