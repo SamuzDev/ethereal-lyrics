@@ -30,7 +30,7 @@ https://private-user-images.githubusercontent.com/108047432/640066507-b70bee4d-2
 ### One-liner with curl
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/master/install.sh | bash
 ```
 
 ### Or clone and install
