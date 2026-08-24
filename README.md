@@ -10,15 +10,11 @@
 
 ## Preview
 
-<!-- REPLACE THIS WITH YOUR VIDEO -->
-<!-- Option 1: GitHub native video (recommended) -->
-https://github.com/user-attachments/assets/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+<!-- Pega tu video aquí después de subirlo a GitHub -->
+<!-- Sube un video a https://github.com/SamuzDev/ethereal-lyrics/issues/new y pega el enlace -->
+<!-- O usa un GIF en assets/preview.gif -->
 
-<!-- Option 2: GIF fallback -->
-<!-- ![Preview](assets/preview.gif) -->
-
-<!-- Option 3: YouTube link -->
-<!-- [![Watch the video](https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg)](https://youtu.be/YOUR_VIDEO_ID) -->
+https://github.com/user-attachments/assets/TU_VIDEO_ID_AQUI
 
 ---
 
