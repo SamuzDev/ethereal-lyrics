@@ -13,6 +13,128 @@ from rich.text import Text
 
 from .font import FONT
 
+# Japanese Hiragana → Romaji mapping
+_HIRAGANA_TO_ROMAJI = {
+    "あ": "a", "い": "i", "う": "u", "え": "e", "お": "o",
+    "か": "ka", "き": "ki", "く": "ku", "け": "ke", "こ": "ko",
+    "さ": "sa", "し": "shi", "す": "su", "せ": "se", "そ": "so",
+    "た": "ta", "ち": "chi", "つ": "tsu", "て": "te", "と": "to",
+    "な": "na", "に": "ni", "ぬ": "nu", "ね": "ne", "の": "no",
+    "は": "ha", "ひ": "hi", "ふ": "fu", "へ": "he", "ほ": "ho",
+    "ま": "ma", "み": "mi", "む": "mu", "め": "me", "も": "mo",
+    "や": "ya", "ゆ": "yu", "よ": "yo",
+    "ら": "ra", "り": "ri", "る": "ru", "れ": "re", "ろ": "ro",
+    "わ": "wa", "を": "wo", "ん": "n",
+    "が": "ga", "ぎ": "gi", "ぐ": "gu", "げ": "ge", "ご": "go",
+    "ざ": "za", "じ": "ji", "ず": "zu", "ぜ": "ze", "ぞ": "zo",
+    "だ": "da", "ぢ": "ji", "づ": "zu", "で": "de", "ど": "do",
+    "ば": "ba", "び": "bi", "ぶ": "bu", "べ": "be", "ぼ": "bo",
+    "ぱ": "pa", "ぴ": "pi", "ぷ": "pu", "ぺ": "pe", "ぽ": "po",
+    "きゃ": "kya", "きゅ": "kyu", "きょ": "kyo",
+    "しゃ": "sha", "しゅ": "shu", "しょ": "sho",
+    "ちゃ": "cha", "ちゅ": "chu", "ちょ": "cho",
+    "にゃ": "nya", "にゅ": "nyu", "にょ": "nyo",
+    "ひゃ": "hya", "ひゅ": "hyu", "ひょ": "hyo",
+    "みゃ": "mya", "みゅ": "myu", "みょ": "myo",
+    "りゃ": "rya", "りゅ": "ryu", "りょ": "ryo",
+    "ぎゃ": "gya", "ぎゅ": "gyu", "ぎょ": "gyo",
+    "じゃ": "ja", "じゅ": "ju", "じょ": "jo",
+    "びゃ": "bya", "びゅ": "byu", "びょ": "byo",
+    "ぴゃ": "pya", "ぴゅ": "pyu", "ぴょ": "pyo",
+}
+
+# Japanese Katakana → Romaji mapping
+_KATAKANA_TO_ROMAJI = {
+    "ア": "a", "イ": "i", "ウ": "u", "エ": "e", "オ": "o",
+    "カ": "ka", "キ": "ki", "ク": "ku", "ケ": "ke", "コ": "ko",
+    "サ": "sa", "シ": "shi", "ス": "su", "セ": "se", "ソ": "so",
+    "タ": "ta", "チ": "chi", "ツ": "tsu", "テ": "te", "ト": "to",
+    "ナ": "na", "ニ": "ni", "ヌ": "nu", "ネ": "ne", "ノ": "no",
+    "ハ": "ha", "ヒ": "hi", "フ": "fu", "ヘ": "he", "ホ": "ho",
+    "マ": "ma", "ミ": "mi", "ム": "mu", "メ": "me", "モ": "mo",
+    "ヤ": "ya", "ユ": "yu", "ヨ": "yo",
+    "ラ": "ra", "リ": "ri", "ル": "ru", "レ": "re", "ロ": "ro",
+    "ワ": "wa", "ヲ": "wo", "ン": "n",
+    "ガ": "ga", "ギ": "gi", "グ": "gu", "ゲ": "ge", "ゴ": "go",
+    "ザ": "za", "ジ": "ji", "ズ": "zu", "ゼ": "ze", "ゾ": "zo",
+    "ダ": "da", "ヂ": "ji", "ヅ": "zu", "デ": "de", "ド": "do",
+    "バ": "ba", "ビ": "bi", "ブ": "bu", "ベ": "be", "ボ": "bo",
+    "パ": "pa", "ピ": "pi", "プ": "pu", "ペ": "pe", "ポ": "po",
+    "キャ": "kya", "キュ": "kyu", "キョ": "kyo",
+    "シャ": "sha", "シュ": "shu", "ショ": "sho",
+    "チャ": "cha", "チュ": "chu", "チョ": "cho",
+    "ニャ": "nya", "ニュ": "nyu", "ニョ": "nyo",
+    "ヒャ": "hya", "ヒュ": "hyu", "ヒョ": "hyo",
+    "ミャ": "mya", "ミュ": "myu", "ミョ": "myo",
+    "リャ": "rya", "リュ": "ryu", "リョ": "ryo",
+    "ギャ": "gya", "ギュ": "gyu", "ギョ": "gyo",
+    "ジャ": "ja", "ジュ": "ju", "ジョ": "jo",
+    "ビャ": "bya", "ビュ": "byu", "ビョ": "byo",
+    "ピャ": "pya", "ピュ": "pyu", "ピョ": "pyo",
+    "ー": "",
+}
+
+# Common Kanji readings (single char)
+_KANJI_TO_ROMAJI = {
+    "愛": "ai", "音": "on", "歌": "uta", "泳": "oyogi",
+    "駅": "eki", "夏": "natsu", "記": "ki", "琴": "koto",
+    "空": "sora", "工": "kou", "口": "kuchi", "今": "ima",
+    "魚": "sakana", "金": "kin", "語": "go", "午": "go",
+    "後": "ato", "五": "go", "骨": "hone", "込": "komi",
+    "左": "hidari", "散": "san", "詩": "shi", "歯": "ha",
+    "四": "yon", "糸": "ito", "字": "ji", "耳": "mimi",
+    "七": "nana", "辞": "ji", "写": "sha", "者": "sha",
+    "主": "shu", "酒": "sake", "首": "kubi", "秋": "aki",
+    "週": "shuu", "春": "haru", "書": "sho", "少": "shou",
+    "場": "ba", "色": "iro", "心": "kokoro", "新": "shin",
+    "图": "zu", "数": "suu", "西": "nishi", "声": "koe",
+    "星": "hoshi", "晴": "hare", "切": "kiri", "雪": "yuki",
+    "船": "fune", "先": "sen", "線": "sen", "前": "mae",
+    "多": "ta", "太": "ta", "体": "tai", "地": "chi",
+    "知": "chi", "茶": "cha", "昼": "hiru", "長": "naga",
+    "鳥": "tori", "通": "tsuu", "典": "ten", "店": "ten",
+    "点": "ten", "電": "den", "刀": "katana", "冬": "fuyu",
+    "当": "tou", "東": "higashi", "答": "kotae", "同": "dou",
+    "道": "michi", "読": "yomi", "内": "nai", "南": "minami",
+    "肉": "niku", "馬": "uma", "売": "uri", "飯": "meshi",
+    "日": "hi", "入": "iri", "猫": "neko", "北": "kita",
+    "白": "shiro", "百": "hyaku", "文": "bun", "木": "ki",
+    "本": "hon", "米": "kome", "毛": "ke", "門": "mon",
+    "夜": "yoru", "野": "no", "来": "rai", "立": "tachi",
+    "林": "hayashi", "六": "roku", "話": "hanashi",
+}
+
+
+def _to_romaji(text: str) -> str:
+    """Convert Japanese text to romaji for block art rendering."""
+    result = []
+    i = 0
+    while i < len(text):
+        # Try 2-char combo first (e.g., きゃ, キャ)
+        if i + 1 < len(text):
+            pair = text[i:i+2]
+            if pair in _HIRAGANA_TO_ROMAJI:
+                result.append(_HIRAGANA_TO_ROMAJI[pair])
+                i += 2
+                continue
+            if pair in _KATAKANA_TO_ROMAJI:
+                result.append(_KATAKANA_TO_ROMAJI[pair])
+                i += 2
+                continue
+
+        ch = text[i]
+        if ch in _HIRAGANA_TO_ROMAJI:
+            result.append(_HIRAGANA_TO_ROMAJI[ch])
+        elif ch in _KATAKANA_TO_ROMAJI:
+            result.append(_KATAKANA_TO_ROMAJI[ch])
+        elif ch in _KANJI_TO_ROMAJI:
+            result.append(_KANJI_TO_ROMAJI[ch])
+        else:
+            result.append(ch)
+        i += 1
+
+    return "".join(result)
+
 
 def _make_text_glyph(ch: str) -> list[str]:
     """Create a 7-row block glyph for characters not in FONT.
@@ -35,6 +157,9 @@ def _make_text_glyph(ch: str) -> list[str]:
 
 
 def render_big(text: str, max_width: int) -> list[str]:
+    # Convert Japanese to romaji first
+    text = _to_romaji(text)
+
     normalized = text.upper()
     for ch in "\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00fc":
         normalized = normalized.replace(ch.upper(), ch)
