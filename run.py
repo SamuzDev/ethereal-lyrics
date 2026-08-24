@@ -13,7 +13,6 @@ Usage:
 Options:
   -l, --lyrics        Show raw lyrics data for current track
   -u, --update        Update to latest version
-  -c, --check-update  Check for available updates
   -C, --color COLOR   Override lyric color (e.g. cyan, magenta)
   -h, --help          Show this help message
 
