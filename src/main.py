@@ -74,6 +74,15 @@ class EtherealLyrics:
         self._running = False
         self.ui.console.clear()
 
+    def _check_keypress(self) -> str | None:
+        """Check for keypress without blocking."""
+        import sys
+        if sys.platform == "linux":
+            import select
+            if select.select([sys.stdin], [], [], 0)[0]:
+                return sys.stdin.read(1)
+        return None
+
     def _fetch_lyrics_for_track(self, name: str, artist: str, album: str, duration_ms: int, track_id: str | None = None) -> Lyrics | None:
         artist_name = artist.split(",")[0].strip()
         return self.lyrics_fetcher.fetch_lyrics(
@@ -95,6 +104,12 @@ class EtherealLyrics:
 
         while self._running:
             try:
+                # Check for quit key
+                key = self._check_keypress()
+                if key and key.lower() in ('q', '\x03'):  # q or Ctrl+C
+                    self._running = False
+                    break
+
                 track = None
                 track_id = None
                 name = artist = album = ""
