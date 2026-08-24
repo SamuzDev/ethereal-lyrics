@@ -199,8 +199,10 @@ install() {
     echo ""
     success "Installation complete!"
     echo ""
-    echo -e "  Run: ${WHITE}ethereal-lyrics${NC}"
-    echo -e "  Debug: ${WHITE}ethereal-lyrics --lyrics${NC}"
+    echo -e "  Run:       ${WHITE}ethereal-lyrics${NC}"
+    echo -e "  Update:    ${WHITE}ethereal-lyrics --update${NC}"
+    echo -e "  Debug:     ${WHITE}ethereal-lyrics --lyrics${NC}"
+    echo -e "  Help:      ${WHITE}ethereal-lyrics --help${NC}"
     echo ""
 }
 
