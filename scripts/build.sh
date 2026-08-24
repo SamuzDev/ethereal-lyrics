@@ -21,7 +21,7 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Create build directory
-BUILD_DIR="build-output"
+BUILD_DIR="dist"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
@@ -47,9 +47,8 @@ pyinstaller \
     --clean \
     run.py
 
-# Move binary to build directory
-cp dist/ethereal-lyrics "$BUILD_DIR/"
-rm -rf build dist ethereal-lyrics.spec
+# PyInstaller outputs to dist/, just clean up build artifacts
+rm -rf build ethereal-lyrics.spec
 
 # Cleanup
 deactivate
