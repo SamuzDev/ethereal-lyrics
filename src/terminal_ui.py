@@ -52,48 +52,52 @@ def _split_words(text: str) -> list[str]:
     """Split text into words, joining punctuation with adjacent words.
 
     Prevents punctuation marks from appearing as separate words.
-    e.g. '? Hello' → 'Hello?', 'what is love?' → 'what is love?'
+    - Closure punctuation (?, !, ., ...) attaches to previous word: 'week ? hey' → 'week? hey'
+    - Opening punctuation (¿, ¡) stays at start: '¿qué' → '¿qué'
+    - If no previous word, closure punct attaches to next: '? Hello' → '?Hello'
     """
     raw = text.split()
     if not raw:
         return []
 
-    punctuation = set("?!.,;:'\")\u00bf\u00a1\u2026")
-    punct_map = {"\u00bf": "?", "\u00a1": "!"}
+    closure = set("?!.,;:\u2026")
+    opening = set("\u00bf\u00a1")
 
-    # Parse each token into (leading_punct, core_word, trailing_punct)
-    tokens = []
+    result: list[str] = []
+    pending = ""
+
     for word in raw:
-        leading = ""
+        # Parse: opening prefix, core, trailing closure, leading closure
+        leading_open = ""
         core = word
-        while core and core[0] in punctuation:
-            leading += core[0]
+        while core and core[0] in opening:
+            leading_open += core[0]
             core = core[1:]
         trailing = ""
-        while core and core[-1] in punctuation:
+        while core and core[-1] in closure:
             trailing = core[-1] + trailing
             core = core[:-1]
-        tokens.append((leading, core, trailing))
+        leading_close = ""
+        while core and core[0] in closure:
+            leading_close += core[0]
+            core = core[1:]
 
-    # Build result: standalone punct goes to next word's end
-    result: list[str] = []
-    pending = ""  # accumulated leading punctuation from standalone tokens
-    for leading, core, trailing in tokens:
         if not core:
-            # Pure punctuation → accumulate, will attach to next word
-            pending += "".join(punct_map.get(c, c) for c in leading + trailing)
+            # Pure punctuation token — accumulate
+            pending += leading_open + leading_close + trailing
         else:
-            # Word: core + trailing + leading (move leading to end, remap)
-            mapped_leading = "".join(punct_map.get(c, c) for c in leading)
-            word = core + trailing + mapped_leading
+            # Word with punctuation attached
+            word = leading_open + leading_close + core + trailing
             if pending:
-                word = word + pending
+                if result:
+                    result[-1] += pending
+                else:
+                    word = pending + word
                 pending = ""
             result.append(word)
 
-    # Remaining pending punctuation
     if pending and result:
-        result[-1] = result[-1] + pending
+        result[-1] += pending
     elif pending:
         result.append(pending)
 
