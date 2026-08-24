@@ -17,20 +17,20 @@ from .font import FONT
 def _make_text_glyph(ch: str) -> list[str]:
     """Create a 7-row block glyph for characters not in FONT.
 
-    Renders the character as centered text within a block-art frame.
+    Renders the character large and centered, framed by block characters.
     """
     S = "\u2588"
-    display = ch if len(ch) <= 2 else ch[:2]
-    # Pad to 6 chars for consistent width
-    padded = display.center(6)
-    glyph = [""] * 7
-    glyph[0] = " " * 6
-    glyph[1] = " " * 6
-    glyph[2] = padded
-    glyph[3] = padded
-    glyph[4] = padded
-    glyph[5] = " " * 6
-    glyph[6] = " " * 6
+    display = ch
+    # Create a large centered representation
+    glyph = [
+        f" {S * 4} ",
+        f"{S}    {S}",
+        f"{S} {display} {S}",
+        f"{S} {display} {S}",
+        f"{S} {display} {S}",
+        f"{S}    {S}",
+        f" {S * 4} ",
+    ]
     return glyph
 
 
