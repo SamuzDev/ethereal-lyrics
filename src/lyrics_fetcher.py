@@ -456,7 +456,7 @@ class MusixmatchProvider(LyricsProvider):
 
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.client = httpx.Client(timeout=10.0)
+        self.client = httpx.Client(timeout=10.0, verify=True)
 
     @property
     def name(self) -> str:
@@ -469,7 +469,7 @@ class MusixmatchProvider(LyricsProvider):
     def _search_track(
         self, track_name: str, artist_name: str
     ) -> str | None:
-        """Search for a track and return track_id."""
+        """Search for a track and return commontrack_id."""
         try:
             response = self.client.get(
                 f"{self.BASE_URL}/track.search",
@@ -479,6 +479,7 @@ class MusixmatchProvider(LyricsProvider):
                     "apikey": self.api_key,
                     "page_size": 5,
                     "s_track_rating": "desc",
+                    "f_has_lyrics": "1",
                 },
             )
 
@@ -488,40 +489,19 @@ class MusixmatchProvider(LyricsProvider):
                 for track in tracks:
                     track_info = track.get("track", {})
                     if track_info.get("has_lyrics") == 1:
-                        return track_info.get("track_id")
+                        return track_info.get("commontrack_id")
         except httpx.HTTPError:
             pass
 
         return None
 
-    def _get_lyrics(self, track_id: str) -> dict | None:
-        """Get lyrics for a track_id."""
-        try:
-            response = self.client.get(
-                f"{self.BASE_URL}/track.lyrics.get",
-                params={
-                    "track_id": track_id,
-                    "apikey": self.api_key,
-                },
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                lyrics_list = data.get("message", {}).get("body", {}).get("lyrics", [])
-                if lyrics_list:
-                    return lyrics_list[0] if isinstance(lyrics_list, list) else lyrics_list
-        except httpx.HTTPError:
-            pass
-
-        return None
-
-    def _get_synced_lyrics(self, track_id: str) -> str | None:
-        """Get synced lyrics for a track_id."""
+    def _get_synced_lyrics(self, commontrack_id: str) -> str | None:
+        """Get synced lyrics for a commontrack_id."""
         try:
             response = self.client.get(
                 f"{self.BASE_URL}/track.subtitle.get",
                 params={
-                    "track_id": track_id,
+                    "commontrack_id": commontrack_id,
                     "apikey": self.api_key,
                     "subtitle_format": "lrc",
                 },
@@ -531,6 +511,27 @@ class MusixmatchProvider(LyricsProvider):
                 data = response.json()
                 subtitle = data.get("message", {}).get("body", {}).get("subtitle", {})
                 return subtitle.get("subtitle_body")
+        except httpx.HTTPError:
+            pass
+
+        return None
+
+    def _get_lyrics(self, commontrack_id: str) -> dict | None:
+        """Get plain lyrics for a commontrack_id."""
+        try:
+            response = self.client.get(
+                f"{self.BASE_URL}/track.lyrics.get",
+                params={
+                    "commontrack_id": commontrack_id,
+                    "apikey": self.api_key,
+                },
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                lyrics_list = data.get("message", {}).get("body", {}).get("lyrics", [])
+                if lyrics_list:
+                    return lyrics_list[0] if isinstance(lyrics_list, list) else lyrics_list
         except httpx.HTTPError:
             pass
 
@@ -546,13 +547,12 @@ class MusixmatchProvider(LyricsProvider):
         if not self.is_available:
             return None
 
-        # Search for track
-        track_id = self._search_track(track_name, artist_name)
-        if not track_id:
+        # Try synced lyrics first
+        commontrack_id = self._search_track(track_name, artist_name)
+        if not commontrack_id:
             return None
 
-        # Try synced lyrics first
-        synced = self._get_synced_lyrics(track_id)
+        synced = self._get_synced_lyrics(commontrack_id)
         if synced:
             lines = parse_synced_lyrics(synced)
             if lines:
@@ -566,7 +566,7 @@ class MusixmatchProvider(LyricsProvider):
                 )
 
         # Fallback to plain lyrics
-        lyrics_data = self._get_lyrics(track_id)
+        lyrics_data = self._get_lyrics(commontrack_id)
         if lyrics_data:
             plain = lyrics_data.get("lyrics_body")
             if plain:
