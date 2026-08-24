@@ -143,6 +143,10 @@ class EtherealLyrics:
                     time.sleep(3)
                     continue
 
+                # Use name+artist as fallback track_id if D-Bus doesn't provide one
+                if not track_id:
+                    track_id = f"{artist}:{name}"
+
                 render_track = RenderTrack(
                     name=name,
                     artists=artist,
@@ -162,7 +166,16 @@ class EtherealLyrics:
                     self._current_lyrics = self._fetch_lyrics_for_track(
                         name, artist, album, duration_ms, track_id
                     )
-                    time.sleep(0.1)  # Brief pause for new lyrics to settle
+                elif track_id and progress_ms < self._last_progress_ms - 1000:
+                    # Position jumped backward — new song or restart
+                    self._current_track_id = track_id
+                    self._last_progress_ms = progress_ms
+                    self.ui._prev_lyric_idx = -1
+                    self.ui._word_index = 0
+                    self.lyrics_fetcher.reset_timing(track_id)
+                    self._current_lyrics = self._fetch_lyrics_for_track(
+                        name, artist, album, duration_ms, track_id
+                    )
                 elif track_id and abs(progress_ms - self._last_progress_ms) > 2000:
                     # Seek detected — reset dynamic offset
                     self.lyrics_fetcher.reset_timing(track_id)
