@@ -362,8 +362,9 @@ class TerminalUI:
 
         if not words:
             big_lines = [""] * 7
-        elif len(words) == 1:
-            big_lines = render_big(words[0], width - 4)
+        elif not is_synced or len(words) == 1:
+            # Unsynced or single word: show full line at once
+            big_lines = render_big(line_text, width - 4)
         else:
             if is_synced and idx + 1 < len(lines) and lines[idx + 1].start_ms is not None:
                 line_duration = lines[idx + 1].start_ms - lines[idx].start_ms

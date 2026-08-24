@@ -630,7 +630,11 @@ class MultiProviderLyricsFetcher:
         duration_ms: int | None = None,
         track_id: str | None = None,
     ) -> Lyrics | None:
-        """Fetch lyrics with fallback across providers."""
+        """Fetch lyrics with fallback across providers.
+
+        Prefers synced lyrics. If a provider returns unsynced lyrics,
+        continues to the next provider. Only returns unsynced as last resort.
+        """
         cache_key = f"{artist_name}:{track_name}".lower()
         if cache_key in self._cache:
             cached = self._cache[cache_key]
@@ -638,6 +642,8 @@ class MultiProviderLyricsFetcher:
             if track_id:
                 cached._dynamic_offset = self._get_dynamic_offset(track_id)
             return cached
+
+        unsynced_fallback: Lyrics | None = None
 
         for provider in self.providers:
             if not provider.is_available:
@@ -658,8 +664,19 @@ class MultiProviderLyricsFetcher:
                 if track_id:
                     result._dynamic_offset = self._get_dynamic_offset(track_id)
 
-                self._cache[cache_key] = result
-                return result
+                # If synced, use immediately — this is what we want
+                if result.is_synced:
+                    self._cache[cache_key] = result
+                    return result
+
+                # If not synced, save as fallback and keep trying
+                if unsynced_fallback is None:
+                    unsynced_fallback = result
+
+        # Return synced if found, otherwise unsynced fallback, or None
+        if unsynced_fallback:
+            self._cache[cache_key] = unsynced_fallback
+            return unsynced_fallback
 
         return None
 
