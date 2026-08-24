@@ -52,7 +52,7 @@ get_binary_url() {
 # Check if binary is available
 check_binary_available() {
     local url=$(get_binary_url)
-    curl -sI "$url" | grep -q "200 OK"
+    curl -sI -L "$url" | grep -q "200 OK"
 }
 
 # Install binary
