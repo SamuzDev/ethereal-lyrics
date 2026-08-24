@@ -1,0 +1,124 @@
+"""Auto-update mechanism for ethereal-lyrics binary."""
+
+import os
+import sys
+import subprocess
+import urllib.request
+import json
+from pathlib import Path
+
+VERSION = "0.1.0"
+REPO = "SamuzDev/ethereal-lyrics"
+GITHUB_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+
+
+def get_current_version() -> str:
+    """Return the current version."""
+    return VERSION
+
+
+def get_latest_version() -> str | None:
+    """Check GitHub for the latest release version."""
+    try:
+        req = urllib.request.Request(
+            GITHUB_API,
+            headers={"Accept": "application/vnd.github.v3+json"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            tag = data.get("tag_name", "")
+            return tag.lstrip("v") if tag else None
+    except Exception:
+        return None
+
+
+def get_platform_binary_name() -> str:
+    """Get the binary name for the current platform."""
+    import platform
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    
+    if machine in ("x86_64", "amd64"):
+        arch = "amd64"
+    elif machine in ("aarch64", "arm64"):
+        arch = "arm64"
+    elif machine in ("armv7l", "armhf"):
+        arch = "armv7"
+    else:
+        arch = machine
+    
+    return f"ethereal-lyrics-{system}-{arch}"
+
+
+def download_update(version: str) -> bool:
+    """Download and install the latest binary."""
+    binary_name = get_platform_binary_name()
+    url = f"https://github.com/{REPO}/releases/download/v{version}/{binary_name}"
+    
+    # Get current binary path
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller binary
+        current_path = Path(sys.executable)
+    else:
+        current_path = Path(__file__).parent
+    
+    # Download to temp file
+    temp_path = current_path.parent / f"{binary_name}.tmp"
+    
+    try:
+        print(f"  Downloading v{version}...")
+        urllib.request.urlretrieve(url, temp_path)
+        
+        # Make executable
+        temp_path.chmod(0o755)
+        
+        # Replace current binary
+        if getattr(sys, 'frozen', False):
+            # On Linux, we can't replace a running binary directly
+            # Move current to .old, then rename new to current
+            old_path = current_path.parent / f"{current_path.name}.old"
+            if old_path.exists():
+                old_path.unlink()
+            current_path.rename(old_path)
+            temp_path.rename(current_path)
+            old_path.unlink(missing_ok=True)
+        else:
+            temp_path.rename(current_path)
+        
+        return True
+    except Exception as e:
+        print(f"  Update failed: {e}")
+        temp_path.unlink(missing_ok=True)
+        return False
+
+
+def check_for_updates(silent: bool = True) -> bool:
+    """Check for updates and optionally install them.
+    
+    Returns True if an update was installed.
+    """
+    current = get_current_version()
+    latest = get_latest_version()
+    
+    if latest is None:
+        return False
+    
+    if current >= latest:
+        return False
+    
+    if not silent:
+        print(f"\n  Update available: v{current} → v{latest}")
+        response = input("  Install update? [y/N] ").strip().lower()
+        if response != 'y':
+            return False
+    
+    if download_update(latest):
+        if not silent:
+            print(f"  Updated to v{latest}! Restart to use the new version.")
+        return True
+    
+    return False
+
+
+if __name__ == "__main__":
+    check_for_updates(silent=False)
