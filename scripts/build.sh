@@ -40,6 +40,7 @@ pip install -e . --quiet --disable-pip-version-check
 info "Building binary..."
 pyinstaller \
     --onefile \
+    --strip \
     --name ethereal-lyrics \
     --add-data "src:src" \
     --paths . \

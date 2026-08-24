@@ -32,14 +32,11 @@ error() { echo -e "${RED}\u2717${NC} $1"; exit 1; }
 detect_platform() {
     local os=$(uname -s | tr '[:upper:]' '[:lower:]')
     local arch=$(uname -m)
-    
     case "$arch" in
         x86_64|amd64) arch="amd64" ;;
         aarch64|arm64) arch="arm64" ;;
         armv7l|armhf) arch="armv7" ;;
-        *) arch="$arch" ;;
     esac
-    
     echo "${os}-${arch}"
 }
 
@@ -51,25 +48,41 @@ get_binary_url() {
 
 # Check if binary is available
 check_binary_available() {
-    local url=$(get_binary_url)
-    curl -sI -L "$url" | grep -q "HTTP/.*200"
+    curl -sI -L "$(get_binary_url)" | grep -q "HTTP/.*200"
+}
+
+# Check if installed binary is up-to-date
+is_up_to_date() {
+    if [ ! -f "$BIN_DIR/$BINARY_NAME" ]; then
+        return 1
+    fi
+    local installed_version
+    installed_version=$("$BIN_DIR/$BINARY_NAME" --check-update 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "")
+    if [ -z "$installed_version" ]; then
+        return 1
+    fi
+    return 0
 }
 
 # Install binary
 install_binary() {
     local url=$(get_binary_url)
     local platform=$(detect_platform)
-    
+
+    # Skip if already up-to-date
+    if is_up_to_date; then
+        success "Already up-to-date"
+        return 0
+    fi
+
     info "Downloading for ${platform}..."
-    
     mkdir -p "$BIN_DIR"
-    
+
     if ! curl -sL "$url" -o "$BIN_DIR/$BINARY_NAME"; then
         error "Failed to download binary. Check your internet connection."
     fi
-    
+
     chmod +x "$BIN_DIR/$BINARY_NAME"
-    
     success "Binary installed to $BIN_DIR/$BINARY_NAME"
 }
 
@@ -89,7 +102,6 @@ setup_path() {
             local fish_file="$fish_dir/ethereal-lyrics.fish"
             if [ ! -f "$fish_file" ] || ! grep -q 'ethereal-lyrics' "$fish_file" 2>/dev/null; then
                 cat > "$fish_file" << 'FISH'
-# ethereal-lyrics PATH
 set -gx PATH "$HOME/.local/bin" $PATH
 FISH
                 success "Created fish config: $fish_file"
@@ -126,37 +138,37 @@ add_to_unix_config() {
 # Install from source (fallback)
 install_from_source() {
     info "Binary not available for $(detect_platform). Installing from source..."
-    
+
     local missing=()
     command -v python3 &> /dev/null || missing+=("python3")
     command -v git &> /dev/null || missing+=("git")
-    
+
     if [ ${#missing[@]} -gt 0 ]; then
         error "Missing: ${missing[*]}. Install them first."
     fi
-    
+
     if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" 2>/dev/null; then
         error "Python 3.10+ required. You have: $(python3 --version 2>&1)"
     fi
-    
+
     if [ -d "$INSTALL_DIR" ]; then
         info "Removing old installation..."
         rm -rf "$INSTALL_DIR"
     fi
-    
+
     info "Downloading ethereal-lyrics..."
     if ! git clone --depth 1 "https://github.com/${REPO}.git" "$INSTALL_DIR"; then
         error "Failed to download. Check your internet connection."
     fi
-    
+
     info "Setting up Python environment..."
     cd "$INSTALL_DIR"
     python3 -m venv venv
     source venv/bin/activate
-    
+
     info "Installing dependencies..."
     pip install . --quiet --disable-pip-version-check --no-cache-dir
-    
+
     info "Creating launcher..."
     mkdir -p "$BIN_DIR"
     cat > "$BIN_DIR/$BINARY_NAME" << 'EOF'
@@ -182,20 +194,20 @@ install() {
     echo -e "${PURPLE}\u2551${NC}                                                      ${PURPLE}\u2551${NC}"
     echo -e "${PURPLE}\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d${NC}"
     echo ""
-    
+
     if [ -d "$INSTALL_DIR" ]; then
         info "Removing old installation..."
         rm -rf "$INSTALL_DIR"
     fi
-    
+
     if check_binary_available; then
         install_binary
     else
         install_from_source
     fi
-    
+
     setup_path
-    
+
     echo ""
     success "Installation complete!"
     echo ""
@@ -210,13 +222,11 @@ install() {
 uninstall() {
     echo ""
     info "Uninstalling ethereal-lyrics..."
-    
+
     rm -f "$BIN_DIR/$BINARY_NAME"
     rm -rf "$INSTALL_DIR"
-    
-    # Remove fish config if exists
     rm -f "$HOME/.config/fish/conf.d/ethereal-lyrics.fish"
-    
+
     success "Uninstalled!"
     echo ""
 }
