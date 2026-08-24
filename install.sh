@@ -20,7 +20,7 @@ NC='\033[0m'
 REPO="SamuzDev/ethereal-lyrics"
 INSTALL_DIR="$HOME/.local/share/ethereal-lyrics"
 BIN_DIR="$HOME/.local/bin"
-MIN_PYTHON_VERSION="3.10"
+BINARY_NAME="ethereal-lyrics"
 
 # Helpers
 info() { echo -e "${BLUE}▸${NC} $1"; }
@@ -28,127 +28,96 @@ success() { echo -e "${GREEN}✓${NC} $1"; }
 warn() { echo -e "${YELLOW}!${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; exit 1; }
 
-# Detect Linux distribution
-detect_distro() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        echo "$ID"
-    else
-        echo "unknown"
-    fi
-}
-
-# Get install command for missing packages
-get_install_cmd() {
-    local distro=$(detect_distro)
-    case "$distro" in
-        ubuntu|debian) echo "sudo apt install -y" ;;
-        fedora) echo "sudo dnf install -y" ;;
-        arch|manjaro) echo "sudo pacman -S --noconfirm" ;;
-        opensuse*|sles) echo "sudo zypper install -y" ;;
-        alpine) echo "sudo apk add" ;;
-        *) echo "Install manually" ;;
+# Detect platform
+detect_platform() {
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    
+    case "$arch" in
+        x86_64|amd64) arch="amd64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        armv7l|armhf) arch="armv7" ;;
+        *) arch="$arch" ;;
     esac
+    
+    echo "${os}-${arch}"
 }
 
-# Check Python version
-check_python_version() {
-    local python_version=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null)
-    local major=$(echo "$python_version" | cut -d. -f1)
-    local minor=$(echo "$python_version" | cut -d. -f2)
-    
-    if [ -z "$major" ] || [ -z "$minor" ]; then
-        return 1
-    fi
-    
-    if [ "$major" -ge 3 ] && [ "$minor" -ge 10 ]; then
-        return 0
-    fi
-    return 1
+# Get binary download URL
+get_binary_url() {
+    local platform=$(detect_platform)
+    echo "https://github.com/${REPO}/releases/latest/download/${BINARY_NAME}-${platform}"
 }
 
-# Check if venv module is available
-check_venv_module() {
-    python3 -c "import venv" 2>/dev/null
+# Check if binary is available
+check_binary_available() {
+    local url=$(get_binary_url)
+    curl -sI "$url" | grep -q "200 OK"
 }
 
-# Check dependencies
-check_deps() {
-    local missing=()
-    local install_cmd=$(get_install_cmd)
+# Install binary
+install_binary() {
+    local url=$(get_binary_url)
+    local platform=$(detect_platform)
     
-    # Check git
-    if ! command -v git &> /dev/null; then
-        missing+=("git")
+    info "Downloading for ${platform}..."
+    
+    # Create bin directory if not exists
+    mkdir -p "$BIN_DIR"
+    
+    # Download binary
+    if ! curl -L "$url" -o "$BIN_DIR/$BINARY_NAME" 2>/dev/null; then
+        error "Failed to download binary. Check your internet connection."
     fi
     
-    # Check python3
-    if ! command -v python3 &> /dev/null; then
-        missing+=("python3")
-    elif ! check_python_version; then
-        error "Python 3.10+ required. You have: $(python3 --version 2>&1)\n  ${DIM}Install: ${install_cmd} python3${NC}"
-    fi
+    # Make executable
+    chmod +x "$BIN_DIR/$BINARY_NAME"
     
-    # Check venv module
-    if command -v python3 &> /dev/null && ! check_venv_module; then
-        warn "Missing python3-venv module. Attempting to install..."
-        case "$(detect_distro)" in
-            ubuntu|debian) 
-                if sudo apt install -y python3-venv 2>/dev/null; then
-                    success "python3-venv installed"
-                else
-                    error "Missing python3-venv. Install manually:\n  ${DIM}sudo apt install python3-venv${NC}"
-                fi
-                ;;
-            fedora)
-                if sudo dnf install -y python3-virtualenv 2>/dev/null; then
-                    success "python3-virtualenv installed"
-                else
-                    error "Missing python3-virtualenv. Install manually:\n  ${DIM}sudo dnf install python3-virtualenv${NC}"
-                fi
-                ;;
-            arch|manjaro)
-                # python3-venv is included with python on Arch
-                ;;
-            *)
-                error "Missing venv module. Install python3-venv or python3-virtualenv for your distro"
-                ;;
-        esac
-    fi
-    
-    # Check dbus-python (optional but recommended)
-    if command -v python3 &> /dev/null; then
-        if ! python3 -c "import dbus" 2>/dev/null; then
-            warn "dbus-python not found. Local Spotify detection may not work."
-            echo -e "  ${DIM}To enable: pip install dbus-python (may need libdbus-1-dev)${NC}"
+    success "Binary installed to $BIN_DIR/$BINARY_NAME"
+}
+
+# Add to PATH if needed
+setup_path() {
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        # Detect shell config file
+        SHELL_CONFIG=""
+        if [ -n "$BASH_VERSION" ]; then
+            SHELL_CONFIG="$HOME/.bashrc"
+        elif [ -n "$ZSH_VERSION" ]; then
+            SHELL_CONFIG="$HOME/.zshrc"
+        fi
+        
+        if [ -n "$SHELL_CONFIG" ] && [ -f "$SHELL_CONFIG" ]; then
+            # Check if already in config
+            if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$SHELL_CONFIG" 2>/dev/null; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_CONFIG"
+                success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
+                echo -e "  ${DIM}Restart your shell or run: source $SHELL_CONFIG${NC}"
+            fi
+        else
+            warn "Add to your shell config:"
+            echo -e "  ${DIM}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
         fi
     fi
-    
-    if [ ${#missing[@]} -gt 0 ]; then
-        error "Missing: ${missing[*]}\n  ${DIM}Install: ${install_cmd} ${missing[*]}${NC}"
-    fi
 }
 
-# Install
-install() {
-    echo ""
-    echo -e "${PURPLE}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${PURPLE}║                                                      ║${NC}"
-    echo -e "${PURPLE}║${CYAN}      ███ █   █  ████ █████  ███  █     █             ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}       █░░██  █░█ ░░░░ ░█░░░█ ░░█ █░    █░            ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}       █░░█░█ █░░███░░░ █░░░█████░█░░   █░░           ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}       █░░█░░██░░ ░░█   █░░ █░░░█░█░░   █░░           ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}      ███░█░░ █░████░░  █░░ █░░░█░█████ █████         ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}       ░░░ ░░  ░░░░░░ ░  ░░  ░░  ░░░░░░░ ░░░░░        ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}        ░░░ ░   ░ ░░░░    ░   ░   ░ ░░░░░ ░░░░░       ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║                                                      ║${NC}"
-    echo -e "${PURPLE}╚══════════════════════════════════════════════════════╝${NC}"
-    echo ""
+# Install from source (fallback)
+install_from_source() {
+    info "Binary not available for $(detect_platform). Installing from source..."
     
     # Check dependencies
-    info "Checking dependencies..."
-    check_deps
-    success "All dependencies found"
+    local missing=()
+    command -v python3 &> /dev/null || missing+=("python3")
+    command -v git &> /dev/null || missing+=("git")
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        error "Missing: ${missing[*]}. Install them first."
+    fi
+    
+    # Check Python version
+    if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" 2>/dev/null; then
+        error "Python 3.10+ required. You have: $(python3 --version 2>&1)"
+    fi
     
     # Remove old installation
     if [ -d "$INSTALL_DIR" ]; then
@@ -175,35 +144,45 @@ install() {
     # Create wrapper script
     info "Creating launcher..."
     mkdir -p "$BIN_DIR"
-    cat > "$BIN_DIR/ethereal-lyrics" << 'EOF'
+    cat > "$BIN_DIR/$BINARY_NAME" << 'EOF'
 #!/bin/bash
 source "$HOME/.local/share/ethereal-lyrics/venv/bin/activate"
 python -m src.main "$@"
 EOF
-    chmod +x "$BIN_DIR/ethereal-lyrics"
+    chmod +x "$BIN_DIR/$BINARY_NAME"
+}
+
+# Install
+install() {
+    echo ""
+    echo -e "${PURPLE}╔══════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║                                                      ║${NC}"
+    echo -e "${PURPLE}║${CYAN}      ███ █   █  ████ █████  ███  █     █             ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}       █░░██  █░█ ░░░░ ░█░░░█ ░░█ █░    █░            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}       █░░█░█ █░░███░░░ █░░░█████░█░░   █░░           ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}       █░░█░░██░░ ░░█   █░░ █░░░█░█░░   █░░           ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}      ███░█░░ █░████░░  █░░ █░░░█░█████ █████         ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}       ░░░ ░░  ░░░░░░ ░  ░░  ░░  ░░░░░░░ ░░░░░        ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}        ░░░ ░   ░ ░░░░    ░   ░   ░ ░░░░░ ░░░░░       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║                                                      ║${NC}"
+    echo -e "${PURPLE}╚══════════════════════════════════════════════════════╝${NC}"
+    echo ""
     
-    # Add to PATH if needed
-    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-        # Detect shell config file
-        SHELL_CONFIG=""
-        if [ -n "$BASH_VERSION" ]; then
-            SHELL_CONFIG="$HOME/.bashrc"
-        elif [ -n "$ZSH_VERSION" ]; then
-            SHELL_CONFIG="$HOME/.zshrc"
-        fi
-        
-        if [ -n "$SHELL_CONFIG" ] && [ -f "$SHELL_CONFIG" ]; then
-            # Check if already in config
-            if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$SHELL_CONFIG" 2>/dev/null; then
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_CONFIG"
-                success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
-                echo -e "  ${DIM}Restart your shell or run: source $SHELL_CONFIG${NC}"
-            fi
-        else
-            warn "Add to your shell config:"
-            echo -e "  ${DIM}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
-        fi
+    # Remove old installation
+    if [ -d "$INSTALL_DIR" ]; then
+        info "Removing old installation..."
+        rm -rf "$INSTALL_DIR"
     fi
+    
+    # Try to install binary first
+    if check_binary_available; then
+        install_binary
+    else
+        install_from_source
+    fi
+    
+    # Setup PATH
+    setup_path
     
     echo ""
     success "Installation complete!"
@@ -217,7 +196,7 @@ uninstall() {
     echo ""
     info "Uninstalling ethereal-lyrics..."
     
-    rm -f "$BIN_DIR/ethereal-lyrics"
+    rm -f "$BIN_DIR/$BINARY_NAME"
     rm -rf "$INSTALL_DIR"
     
     success "Uninstalled!"
