@@ -61,6 +61,12 @@ pip install .
 ```bash
 # Run the application
 ethereal-lyrics
+
+# Check for updates
+ethereal-lyrics --check-update
+
+# Install updates
+ethereal-lyrics --update
 ```
 
 That's it! The binary includes everything you need.
