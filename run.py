@@ -125,16 +125,33 @@ if "-l" in args or "--lyrics" in args:
 
 # Handle --color / -C
 color_override = None
+color_arg_found = False
 for i, arg in enumerate(args):
-    if arg in ("-C", "--color") and i + 1 < len(args):
-        color_val = args[i + 1]
-        # Accept numbers 1-256
-        if color_val.isdigit() and 1 <= int(color_val) <= 256:
-            color_override = f"color({color_val})"
-        else:
-            color_override = color_val
-        os.environ["LYRIC_COLOR"] = color_override
+    if arg in ("-C", "--color"):
+        color_arg_found = True
+        if i + 1 < len(args):
+            color_val = args[i + 1]
+            # Accept numbers 1-256
+            if color_val.isdigit() and 1 <= int(color_val) <= 256:
+                color_override = f"color({color_val})"
+            else:
+                color_override = color_val
+            os.environ["LYRIC_COLOR"] = color_override
         break
+
+# Check for unknown arguments
+valid_flags = {"-l", "--lyrics", "-u", "--update", "-c", "--check-update",
+               "-v", "--version", "-C", "--color", "-h", "--help"}
+for arg in args:
+    if arg.startswith("-") and arg not in valid_flags:
+        # Check if it's a value for -C/--color (skip those)
+        if color_arg_found and arg == args[args.index("-C") + 1] if "-C" in args else False:
+            continue
+        if color_arg_found and arg == args[args.index("--color") + 1] if "--color" in args else False:
+            continue
+        print(f"Unknown option: {arg}")
+        print("Run 'ethereal-lyrics -h' for usage information.")
+        sys.exit(1)
 
 # Silent update check on startup
 try:
