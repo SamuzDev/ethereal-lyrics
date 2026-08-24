@@ -71,7 +71,7 @@ class DynamicOffset:
     _track_start_time: float = 0.0
     _last_track_id: str = ""
     _calibrated_offset: int = 0
-    _min_samples: int = 2
+    _min_samples: int = 3
     _max_samples: int = 10
 
     _speed_history: list[float] = field(default_factory=list)
@@ -81,15 +81,14 @@ class DynamicOffset:
     _smoothing_factor: float = 0.3
 
     def reset(self, track_id: str = "") -> None:
-        """Reset calibration for a new track."""
-        if track_id != self._last_track_id:
-            self._samples.clear()
-            self._speed_history.clear()
-            self._track_start_time = time.monotonic()
-            self._last_track_id = track_id
-            self._calibrated_offset = 0
-            self._speed_adjustment = 0
-            self._baseline_speed = 1.0
+        """Reset calibration for a new track or seek."""
+        self._samples.clear()
+        self._speed_history.clear()
+        self._track_start_time = time.monotonic()
+        self._last_track_id = track_id
+        self._calibrated_offset = 0
+        self._speed_adjustment = 0
+        self._baseline_speed = 1.0
 
     def add_sample(self, position_ms: int) -> None:
         """Add a timing sample from Spotify."""
@@ -150,7 +149,7 @@ class DynamicOffset:
 
         # Smooth the adjustment
         self._speed_adjustment = int(
-            self._speed_adjustment * 0.7 + adjustment * 0.3
+            self._speed_adjustment * 0.5 + adjustment * 0.5
         )
 
         return self._speed_adjustment
@@ -179,7 +178,7 @@ class DynamicOffset:
         drift_rate = (total_position_ms / total_time_ms) - 1.0
 
         # Calculate average offset from drift
-        avg_drift_ms = int(drift_rate * total_time_ms * 0.1)
+        avg_drift_ms = int(drift_rate * total_time_ms * 0.3)
 
         # Get speed-based adjustment
         speed_adj = self._calculate_speed_adjustment()
@@ -187,9 +186,9 @@ class DynamicOffset:
         # Combine drift and speed adjustments
         combined = int(avg_drift_ms * 0.6 + speed_adj * 0.4)
 
-        # Smooth the final offset
+        # Smooth the final offset (faster convergence at start)
         self._calibrated_offset = int(
-            self._calibrated_offset * 0.7 + combined * 0.3
+            self._calibrated_offset * 0.5 + combined * 0.5
         )
 
         return self._calibrated_offset

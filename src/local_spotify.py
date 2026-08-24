@@ -37,6 +37,8 @@ class LocalSpotifyClient:
         self._is_playing = False
         self._last_position: int = 0
         self._last_read_time: float = 0.0
+        self._poll_count: int = 0
+        self._anchored: bool = False
 
     def _ensure_connected(self) -> bool:
         if self._connected:
@@ -91,19 +93,34 @@ class LocalSpotifyClient:
     def get_interpolated_position(self) -> int:
         """Get position interpolated between D-Bus reads.
 
-        When playing, estimates the current position based on the last
-        D-Bus read plus elapsed wall-clock time, eliminating the
-        systematic lag from polling delay.
+        Uses wall-clock extrapolation for smooth updates, with periodic
+        re-anchoring to the real D-Bus position to prevent drift.
+        Discards outlier readings that differ too much from expected.
         """
         status = self._get_playback_status()
         self._is_playing = status == "Playing"
 
-        position = self._get_position()
+        real_pos = self._get_position()
         now = time.monotonic()
 
-        if self._is_playing and self._last_read_time > 0:
+        if self._is_playing and self._last_read_time > 0 and self._anchored:
             elapsed_ms = int((now - self._last_read_time) * 1000)
-            position = self._last_position + elapsed_ms
+            expected = self._last_position + elapsed_ms
+
+            # Discard outlier readings (>500ms off from expected)
+            if abs(real_pos - expected) > 500:
+                position = expected
+            else:
+                position = real_pos
+
+            # Re-anchor every 5 polls (~2.5s) to correct drift
+            self._poll_count += 1
+            if self._poll_count >= 5:
+                self._poll_count = 0
+                position = real_pos
+        else:
+            position = real_pos
+            self._anchored = True
 
         self._last_position = position
         self._last_read_time = now

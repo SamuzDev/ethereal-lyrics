@@ -66,6 +66,7 @@ class EtherealLyrics:
 
         self._current_track_id: str | None = None
         self._current_lyrics: Lyrics | None = None
+        self._last_progress_ms: int = 0
         self._running = True
 
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -137,10 +138,17 @@ class EtherealLyrics:
 
                 if track_id != self._current_track_id:
                     self._current_track_id = track_id
+                    self._last_progress_ms = progress_ms
                     self.lyrics_fetcher.reset_timing(track_id)
                     self._current_lyrics = self._fetch_lyrics_for_track(
                         name, artist, album, duration_ms, track_id
                     )
+                elif track_id and abs(progress_ms - self._last_progress_ms) > 2000:
+                    # Seek detected — reset dynamic offset
+                    self.lyrics_fetcher.reset_timing(track_id)
+                    self._last_progress_ms = progress_ms
+                else:
+                    self._last_progress_ms = progress_ms
 
                 if track_id:
                     self.lyrics_fetcher.update_timing(track_id, progress_ms)

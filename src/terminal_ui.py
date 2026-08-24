@@ -245,7 +245,7 @@ class TerminalUI:
                         ratio = max(0.0, min(1.0, elapsed / duration))
                         interpolated_idx = min(int(ratio * len(words)), len(words) - 1)
                         now = time.monotonic()
-                        if now - self._word_change_time >= word_duration_s * 0.8:
+                        if now - self._word_change_time >= word_duration_s * 0.4:
                             self._word_index = interpolated_idx
                             self._word_change_time = now
                     else:
