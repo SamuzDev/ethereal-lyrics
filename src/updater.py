@@ -6,9 +6,9 @@ import urllib.request
 import json
 from pathlib import Path
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 REPO = "SamuzDev/ethereal-lyrics"
-GITHUB_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+GITHUB_API = f"https://api.github.com/repos/{REPO}/releases"
 
 
 def get_current_version() -> str:
@@ -17,16 +17,20 @@ def get_current_version() -> str:
 
 
 def get_latest_version() -> str | None:
-    """Check GitHub for the latest release version."""
+    """Check GitHub for the latest non-draft release version."""
     try:
         req = urllib.request.Request(
             GITHUB_API,
             headers={"Accept": "application/vnd.github.v3+json"}
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-            tag = data.get("tag_name", "")
-            return tag.lstrip("v") if tag else None
+            releases = json.loads(resp.read())
+            for release in releases:
+                if not release.get("draft", False):
+                    tag = release.get("tag_name", "")
+                    if tag:
+                        return tag.lstrip("v")
+            return None
     except Exception:
         return None
 

@@ -14,11 +14,12 @@ Options:
   -l, --lyrics        Show raw lyrics data for current track
   -u, --update        Update to latest version
   -c, --check-update  Check for available updates
+  -v, --version       Show current version
   -C, --color COLOR   Override lyric color (e.g. cyan, magenta, 196)
   -h, --help          Show this help message
 
 Environment Variables:
-  LYRIC_OFFSET_MS     Lyric timing offset in ms (default: 1000)
+  LYRIC_OFFSET_MS     Lyric timing offset in ms (default: 0)
   LYRIC_COLOR         Lyric text color (default: bold white)
   SPOTIFY_CLIENT_ID   Spotify API client ID (optional)
   SPOTIFY_CLIENT_SECRET Spotify API client secret (optional)
@@ -82,6 +83,11 @@ if "-h" in args or "--help" in args:
     print(HELP_TEXT)
     sys.exit(0)
 
+if "-v" in args or "--version" in args:
+    from src.updater import get_current_version
+    print(f"ethereal-lyrics v{get_current_version()}")
+    sys.exit(0)
+
 if "-u" in args or "--update" in args:
     try:
         from src.updater import check_for_updates
@@ -95,11 +101,16 @@ if "-c" in args or "--check-update" in args:
         from src.updater import get_current_version, get_latest_version, _parse_version
         current = get_current_version()
         latest = get_latest_version()
-        if latest and _parse_version(current) < _parse_version(latest):
-            print(f"Update available: v{current} → v{latest}")
-            print(f"Run: ethereal-lyrics --update")
-            sys.exit(1)
-        # Silent if up to date
+        print(f"Current version: v{current}")
+        if latest:
+            if _parse_version(current) < _parse_version(latest):
+                print(f"Latest version:  v{latest}")
+                print(f"\nRun: ethereal-lyrics --update")
+                sys.exit(1)
+            else:
+                print(f"Latest version:  v{latest} (up to date)")
+        else:
+            print("Could not check for updates")
     except Exception as e:
         print(f"Check failed: {e}", file=sys.stderr)
     sys.exit(0)

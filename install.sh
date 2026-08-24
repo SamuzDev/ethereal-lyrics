@@ -210,6 +210,7 @@ install() {
     echo -e "  Run:       ${WHITE}ethereal-lyrics${NC}"
     echo -e "  Update:    ${WHITE}ethereal-lyrics -u${NC}  ${DIM}(--update)${NC}"
     echo -e "  Debug:     ${WHITE}ethereal-lyrics -l${NC}  ${DIM}(--lyrics)${NC}"
+    echo -e "  Version:   ${WHITE}ethereal-lyrics -v${NC}  ${DIM}(--version)${NC}"
     echo -e "  Color:     ${WHITE}ethereal-lyrics -C cyan${NC}"
     echo -e "  Help:      ${WHITE}ethereal-lyrics -h${NC}  ${DIM}(--help)${NC}"
     echo ""
