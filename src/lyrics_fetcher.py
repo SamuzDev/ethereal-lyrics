@@ -3,16 +3,59 @@
 Providers:
 - LRCLib: Free, synced lyrics, no auth required
 - Musixmatch: High quality synced lyrics, requires API key (free tier: 2000/day)
-- Genius: Plain lyrics fallback, requires API key (free)
 """
 
 import httpx
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 from difflib import SequenceMatcher
 from abc import ABC, abstractmethod
-import re
+
+
+def parse_synced_lyrics(synced: str) -> list["LyricLine"]:
+    """Parse LRC format synced lyrics into LyricLine objects."""
+    lines = []
+    for raw_line in synced.strip().split("\n"):
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        if raw_line.startswith("["):
+            bracket_end = raw_line.find("]")
+            if bracket_end == -1:
+                continue
+
+            timestamp = raw_line[1:bracket_end]
+            text = raw_line[bracket_end + 1:].strip()
+
+            try:
+                parts = timestamp.split(":")
+                minutes = int(parts[0])
+                sec_parts = parts[1].split(".")
+                seconds = int(sec_parts[0])
+                centiseconds = int(sec_parts[1]) if len(sec_parts) > 1 else 0
+                start_ms = (minutes * 60 + seconds) * 1000 + centiseconds * 10
+                lines.append(LyricLine(text=text, start_ms=start_ms))
+            except (ValueError, IndexError):
+                continue
+
+    for i in range(len(lines)):
+        if i + 1 < len(lines):
+            lines[i].end_ms = lines[i + 1].start_ms
+        else:
+            lines[i].end_ms = lines[i].start_ms + 5000
+
+    return lines
+
+
+def parse_plain_lyrics(plain: str) -> list["LyricLine"]:
+    """Parse plain text lyrics into LyricLine objects."""
+    lines = []
+    for raw_line in plain.strip().split("\n"):
+        text = raw_line.strip()
+        if text:
+            lines.append(LyricLine(text=text))
+    return lines
 
 
 @dataclass
@@ -24,20 +67,18 @@ class DynamicOffset:
     and adjusts offset accordingly.
     """
 
-    # Calibration data
-    _samples: list[tuple[float, int]] = field(default_factory=list)  # (timestamp, position_ms)
+    _samples: list[tuple[float, int]] = field(default_factory=list)
     _track_start_time: float = 0.0
     _last_track_id: str = ""
     _calibrated_offset: int = 0
     _min_samples: int = 3
     _max_samples: int = 15
 
-    # Speed detection
-    _speed_history: list[float] = field(default_factory=list)  # Recent speeds (ms position per ms real)
+    _speed_history: list[float] = field(default_factory=list)
     _max_speed_history: int = 8
-    _baseline_speed: float = 1.0  # Normal speed (1.0 = realtime)
-    _speed_adjustment: int = 0  # Current adjustment based on speed
-    _smoothing_factor: float = 0.3  # How quickly to adapt (0-1)
+    _baseline_speed: float = 1.0
+    _speed_adjustment: int = 0
+    _smoothing_factor: float = 0.3
 
     def reset(self, track_id: str = "") -> None:
         """Reset calibration for a new track."""
@@ -171,11 +212,11 @@ class LyricLine:
     """Represents a single line of lyrics with optional timestamp."""
 
     text: str
-    start_ms: Optional[int] = None
-    end_ms: Optional[int] = None
-    _duration_ms: Optional[int] = None
-    _words: Optional[list[str]] = None
-    _word_positions: Optional[list[tuple[int, int]]] = None
+    start_ms: int | None = None
+    end_ms: int | None = None
+    _duration_ms: int | None = None
+    _words: list[str] | None = None
+    _word_positions: list[tuple[int, int]] | None = None
 
 
 @dataclass
@@ -184,12 +225,12 @@ class Lyrics:
 
     track_name: str
     artist_name: str
-    album_name: Optional[str]
+    album_name: str | None
     lines: list[LyricLine]
     is_synced: bool
     offset_ms: int = 0
     provider: str = "unknown"
-    _dynamic_offset: Optional[DynamicOffset] = field(default=None, repr=False)
+    _dynamic_offset: DynamicOffset | None = field(default=None, repr=False)
 
     def __bool__(self) -> bool:
         return len(self.lines) > 0
@@ -281,9 +322,9 @@ class LyricsProvider(ABC):
         self,
         track_name: str,
         artist_name: str,
-        album_name: Optional[str] = None,
-        duration_ms: Optional[int] = None,
-    ) -> Optional[Lyrics]:
+        album_name: str | None = None,
+        duration_ms: int | None = None,
+    ) -> Lyrics | None:
         pass
 
     @property
@@ -321,55 +362,13 @@ class LRCLibProvider(LyricsProvider):
     def _fuzzy_match(self, a: str, b: str, threshold: float = 0.6) -> bool:
         return SequenceMatcher(None, self._normalize(a), self._normalize(b)).ratio() >= threshold
 
-    def _parse_synced_lyrics(self, synced: str) -> list[LyricLine]:
-        lines = []
-        for raw_line in synced.strip().split("\n"):
-            raw_line = raw_line.strip()
-            if not raw_line:
-                continue
-
-            if raw_line.startswith("["):
-                bracket_end = raw_line.find("]")
-                if bracket_end == -1:
-                    continue
-
-                timestamp = raw_line[1:bracket_end]
-                text = raw_line[bracket_end + 1:].strip()
-
-                try:
-                    parts = timestamp.split(":")
-                    minutes = int(parts[0])
-                    sec_parts = parts[1].split(".")
-                    seconds = int(sec_parts[0])
-                    centiseconds = int(sec_parts[1]) if len(sec_parts) > 1 else 0
-                    start_ms = (minutes * 60 + seconds) * 1000 + centiseconds * 10
-                    lines.append(LyricLine(text=text, start_ms=start_ms))
-                except (ValueError, IndexError):
-                    continue
-
-        for i in range(len(lines)):
-            if i + 1 < len(lines):
-                lines[i].end_ms = lines[i + 1].start_ms
-            else:
-                lines[i].end_ms = lines[i].start_ms + 5000
-
-        return lines
-
-    def _parse_plain_lyrics(self, plain: str) -> list[LyricLine]:
-        lines = []
-        for raw_line in plain.strip().split("\n"):
-            text = raw_line.strip()
-            if text:
-                lines.append(LyricLine(text=text))
-        return lines
-
     def fetch(
         self,
         track_name: str,
         artist_name: str,
-        album_name: Optional[str] = None,
-        duration_ms: Optional[int] = None,
-    ) -> Optional[Lyrics]:
+        album_name: str | None = None,
+        duration_ms: int | None = None,
+    ) -> Lyrics | None:
         try:
             response = self.client.get(
                 f"{self.base_url}/get",
@@ -416,8 +415,8 @@ class LRCLibProvider(LyricsProvider):
         data: dict,
         track_name: str,
         artist_name: str,
-        album_name: Optional[str],
-    ) -> Optional[Lyrics]:
+        album_name: str | None,
+    ) -> Lyrics | None:
         synced = data.get("syncedLyrics")
         plain = data.get("plainLyrics")
 
@@ -425,10 +424,10 @@ class LRCLibProvider(LyricsProvider):
         is_synced = False
 
         if synced:
-            lines = self._parse_synced_lyrics(synced)
+            lines = parse_synced_lyrics(synced)
             is_synced = True
         elif plain:
-            lines = self._parse_plain_lyrics(plain)
+            lines = parse_plain_lyrics(plain)
 
         if not lines:
             return None
@@ -464,53 +463,9 @@ class MusixmatchProvider(LyricsProvider):
     def is_available(self) -> bool:
         return bool(self.api_key)
 
-    def _parse_synced_lyrics(self, synced: str) -> list[LyricLine]:
-        """Parse Musixmatch synced lyrics format."""
-        lines = []
-        for raw_line in synced.strip().split("\n"):
-            raw_line = raw_line.strip()
-            if not raw_line:
-                continue
-
-            # Musixmatch uses format: [MM:SS.xx]lyrics text
-            if raw_line.startswith("["):
-                bracket_end = raw_line.find("]")
-                if bracket_end == -1:
-                    continue
-
-                timestamp = raw_line[1:bracket_end]
-                text = raw_line[bracket_end + 1:].strip()
-
-                try:
-                    parts = timestamp.split(":")
-                    minutes = int(parts[0])
-                    sec_parts = parts[1].split(".")
-                    seconds = int(sec_parts[0])
-                    centiseconds = int(sec_parts[1]) if len(sec_parts) > 1 else 0
-                    start_ms = (minutes * 60 + seconds) * 1000 + centiseconds * 10
-                    lines.append(LyricLine(text=text, start_ms=start_ms))
-                except (ValueError, IndexError):
-                    continue
-
-        for i in range(len(lines)):
-            if i + 1 < len(lines):
-                lines[i].end_ms = lines[i + 1].start_ms
-            else:
-                lines[i].end_ms = lines[i].start_ms + 5000
-
-        return lines
-
-    def _parse_plain_lyrics(self, plain: str) -> list[LyricLine]:
-        lines = []
-        for raw_line in plain.strip().split("\n"):
-            text = raw_line.strip()
-            if text:
-                lines.append(LyricLine(text=text))
-        return lines
-
     def _search_track(
         self, track_name: str, artist_name: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """Search for a track and return track_id."""
         try:
             response = self.client.get(
@@ -536,7 +491,7 @@ class MusixmatchProvider(LyricsProvider):
 
         return None
 
-    def _get_lyrics(self, track_id: str) -> Optional[dict]:
+    def _get_lyrics(self, track_id: str) -> dict | None:
         """Get lyrics for a track_id."""
         try:
             response = self.client.get(
@@ -557,7 +512,7 @@ class MusixmatchProvider(LyricsProvider):
 
         return None
 
-    def _get_synced_lyrics(self, track_id: str) -> Optional[str]:
+    def _get_synced_lyrics(self, track_id: str) -> str | None:
         """Get synced lyrics for a track_id."""
         try:
             response = self.client.get(
@@ -582,9 +537,9 @@ class MusixmatchProvider(LyricsProvider):
         self,
         track_name: str,
         artist_name: str,
-        album_name: Optional[str] = None,
-        duration_ms: Optional[int] = None,
-    ) -> Optional[Lyrics]:
+        album_name: str | None = None,
+        duration_ms: int | None = None,
+    ) -> Lyrics | None:
         if not self.is_available:
             return None
 
@@ -596,7 +551,7 @@ class MusixmatchProvider(LyricsProvider):
         # Try synced lyrics first
         synced = self._get_synced_lyrics(track_id)
         if synced:
-            lines = self._parse_synced_lyrics(synced)
+            lines = parse_synced_lyrics(synced)
             if lines:
                 return Lyrics(
                     track_name=track_name,
@@ -612,7 +567,7 @@ class MusixmatchProvider(LyricsProvider):
         if lyrics_data:
             plain = lyrics_data.get("lyrics_body")
             if plain:
-                lines = self._parse_plain_lyrics(plain)
+                lines = parse_plain_lyrics(plain)
                 if lines:
                     return Lyrics(
                         track_name=track_name,
@@ -626,118 +581,13 @@ class MusixmatchProvider(LyricsProvider):
         return None
 
 
-class GeniusProvider(LyricsProvider):
-    """Genius provider - plain lyrics fallback.
-
-    Free tier available, no sync support.
-    """
-
-    BASE_URL = "https://api.genius.com"
-
-    def __init__(self, access_token: str):
-        self.access_token = access_token
-        self.client = httpx.Client(
-            timeout=10.0,
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-
-    @property
-    def name(self) -> str:
-        return "genius"
-
-    @property
-    def is_available(self) -> bool:
-        return bool(self.access_token)
-
-    def _search_track(
-        self, track_name: str, artist_name: str
-    ) -> Optional[int]:
-        """Search for a track and return song_id."""
-        try:
-            response = self.client.get(
-                f"{self.BASE_URL}/search",
-                params={"q": f"{track_name} {artist_name}"},
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                hits = data.get("response", {}).get("hits", [])
-                for hit in hits:
-                    result = hit.get("result", {})
-                    # Fuzzy match artist name
-                    primary_artist = result.get("primary_artist", {})
-                    if primary_artist.get("name", "").lower() == artist_name.lower():
-                        return result.get("id")
-        except httpx.HTTPError:
-            pass
-
-        return None
-
-    def _get_lyrics(self, song_id: int) -> Optional[str]:
-        """Get lyrics HTML for a song_id."""
-        try:
-            response = self.client.get(
-                f"{self.BASE_URL}/songs/{song_id}",
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                song = data.get("response", {}).get("song", {})
-                # Note: Genius API doesn't return lyrics directly
-                # You'd need to scrape the URL or use a different approach
-                url = song.get("url")
-                if url:
-                    # For now, we'll return None - in production, you'd scrape this
-                    pass
-        except httpx.HTTPError:
-            pass
-
-        return None
-
-    def fetch(
-        self,
-        track_name: str,
-        artist_name: str,
-        album_name: Optional[str] = None,
-        duration_ms: Optional[int] = None,
-    ) -> Optional[Lyrics]:
-        if not self.is_available:
-            return None
-
-        song_id = self._search_track(track_name, artist_name)
-        if not song_id:
-            return None
-
-        lyrics_text = self._get_lyrics(song_id)
-        if not lyrics_text:
-            return None
-
-        lines = []
-        for raw_line in lyrics_text.strip().split("\n"):
-            text = raw_line.strip()
-            if text:
-                lines.append(LyricLine(text=text))
-
-        if not lines:
-            return None
-
-        return Lyrics(
-            track_name=track_name,
-            artist_name=artist_name,
-            album_name=album_name,
-            lines=lines,
-            is_synced=False,
-            provider=self.name,
-        )
-
-
 class MultiProviderLyricsFetcher:
     """Multi-provider lyrics fetcher with fallback."""
 
     def __init__(
         self,
-        musixmatch_api_key: Optional[str] = None,
-        genius_access_token: Optional[str] = None,
+        musixmatch_api_key: str | None = None,
+        genius_access_token: str | None = None,
         static_offset_ms: int = 0,
     ):
         self.providers: list[LyricsProvider] = []
@@ -751,10 +601,6 @@ class MultiProviderLyricsFetcher:
         # Add Musixmatch if API key provided
         if musixmatch_api_key:
             self.providers.append(MusixmatchProvider(musixmatch_api_key))
-
-        # Add Genius if token provided
-        if genius_access_token:
-            self.providers.append(GeniusProvider(genius_access_token))
 
     def _get_dynamic_offset(self, track_id: str) -> DynamicOffset:
         """Get or create dynamic offset for a track."""
@@ -777,10 +623,10 @@ class MultiProviderLyricsFetcher:
         self,
         track_name: str,
         artist_name: str,
-        album_name: Optional[str] = None,
-        duration_ms: Optional[int] = None,
-        track_id: Optional[str] = None,
-    ) -> Optional[Lyrics]:
+        album_name: str | None = None,
+        duration_ms: int | None = None,
+        track_id: str | None = None,
+    ) -> Lyrics | None:
         """Fetch lyrics with fallback across providers."""
         cache_key = f"{artist_name}:{track_name}".lower()
         if cache_key in self._cache:

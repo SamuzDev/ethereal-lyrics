@@ -80,11 +80,10 @@ class EtherealLyrics:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum: int, frame) -> None:
         """Handle interrupt signals."""
         self._running = False
         self.ui.console.clear()
-        sys.exit(0)
 
     def _fetch_lyrics_for_track(self, name: str, artist: str, album: str, duration_ms: int, track_id: str | None = None) -> Lyrics | None:
         """Fetch lyrics for the given track."""

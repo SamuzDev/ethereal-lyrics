@@ -1,8 +1,6 @@
 """Local Spotify client using D-Bus MPRIS (no credentials needed)."""
 
-import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -15,7 +13,7 @@ class LocalTrack:
     duration_ms: int
     position_ms: int
     is_playing: bool
-    track_id: Optional[str] = None
+    track_id: str | None = None
 
 
 class LocalSpotifyClient:
@@ -55,7 +53,7 @@ class LocalSpotifyClient:
             self._connected = False
             return False
 
-    def _get_metadata(self) -> Optional[dict]:
+    def _get_metadata(self) -> dict | None:
         """Get track metadata from D-Bus."""
         if not self._ensure_connected():
             return None
@@ -67,7 +65,7 @@ class LocalSpotifyClient:
             self._connected = False
             return None
 
-    def _get_playback_status(self) -> Optional[str]:
+    def _get_playback_status(self) -> str | None:
         """Get playback status from D-Bus."""
         if not self._ensure_connected():
             return None
@@ -90,7 +88,7 @@ class LocalSpotifyClient:
         except Exception:
             return 0
 
-    def get_current_track(self) -> Optional[LocalTrack]:
+    def get_current_track(self) -> LocalTrack | None:
         """Get the currently playing track from local Spotify.
 
         Returns:

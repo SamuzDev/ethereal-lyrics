@@ -2,7 +2,6 @@
 
 import os
 import sys
-import subprocess
 import urllib.request
 import json
 from pathlib import Path
@@ -32,6 +31,14 @@ def get_latest_version() -> str | None:
         return None
 
 
+def _parse_version(version: str) -> tuple[int, ...]:
+    """Parse version string into comparable tuple."""
+    try:
+        return tuple(int(x) for x in version.split("."))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
 def get_platform_binary_name() -> str:
     """Get the binary name for the current platform."""
     import platform
@@ -57,33 +64,41 @@ def download_update(version: str) -> bool:
     
     # Get current binary path
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller binary
         current_path = Path(sys.executable)
     else:
-        current_path = Path(__file__).parent
+        # Running from source - don't overwrite src directory
+        print("  Cannot auto-update from source. Use 'pip install' instead.")
+        return False
     
     # Download to temp file
     temp_path = current_path.parent / f"{binary_name}.tmp"
     
     try:
         print(f"  Downloading v{version}...")
-        urllib.request.urlretrieve(url, temp_path)
         
-        # Make executable
+        def show_progress(block_num: int, block_size: int, total_size: int) -> None:
+            downloaded = block_num * block_size
+            if total_size > 0:
+                percent = min(100, (downloaded / total_size) * 100)
+                bar_len = 30
+                filled = int(bar_len * downloaded / total_size)
+                bar = "\u2588" * filled + "\u2591" * (bar_len - filled)
+                print(f"\r  [{bar}] {percent:.1f}%", end="", flush=True)
+            else:
+                print(f"\r  Downloaded: {downloaded / 1024 / 1024:.1f} MB", end="", flush=True)
+        
+        urllib.request.urlretrieve(url, temp_path, reporthook=show_progress)
+        print()
+        
         temp_path.chmod(0o755)
         
         # Replace current binary
-        if getattr(sys, 'frozen', False):
-            # On Linux, we can't replace a running binary directly
-            # Move current to .old, then rename new to current
-            old_path = current_path.parent / f"{current_path.name}.old"
-            if old_path.exists():
-                old_path.unlink()
-            current_path.rename(old_path)
-            temp_path.rename(current_path)
-            old_path.unlink(missing_ok=True)
-        else:
-            temp_path.rename(current_path)
+        old_path = current_path.parent / f"{current_path.name}.old"
+        if old_path.exists():
+            old_path.unlink()
+        current_path.rename(old_path)
+        temp_path.rename(current_path)
+        old_path.unlink(missing_ok=True)
         
         return True
     except Exception as e:
@@ -103,11 +118,11 @@ def check_for_updates(silent: bool = True) -> bool:
     if latest is None:
         return False
     
-    if current >= latest:
+    if _parse_version(current) >= _parse_version(latest):
         return False
     
     if not silent:
-        print(f"\n  Update available: v{current} → v{latest}")
+        print(f"\n  Update available: v{current} \u2192 v{latest}")
         response = input("  Install update? [y/N] ").strip().lower()
         if response != 'y':
             return False
