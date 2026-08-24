@@ -39,6 +39,8 @@ curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/insta
 curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash -s -- uninstall
 ```
 
+> **Note:** No configuration needed! The app works out of the box with local Spotify detection.
+
 ### Or clone and install
 
 ```bash
@@ -71,18 +73,13 @@ source venv/bin/activate
 pip install -e .
 ```
 
-### 4. Configure Spotify
-
-```bash
-cp .env.example .env
-# Edit .env with your Spotify credentials (required)
-```
-
-### 5. Run
+### 4. Run
 
 ```bash
 python -m src.main
 ```
+
+> **Note:** Spotify API credentials are optional. The app uses local D-Bus detection by default (no login needed).
 
 ---
 
@@ -100,10 +97,11 @@ python -m src.main
 
 ## Configuration
 
-Create a `.env` file in the project root (required):
+Create a `.env` file in the project root (optional):
 
 ```env
-# Spotify API (required)
+# Spotify API (optional - for web playback detection)
+# Only needed if you want to use Spotify's web player
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
 SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
@@ -114,12 +112,7 @@ SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
 LYRIC_OFFSET_MS=1000
 ```
 
-### Getting Spotify API Credentials
-
-1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Create a new app
-3. Set redirect URI to `http://localhost:8888/callback`
-4. Copy your Client ID and Client Secret
+> **Note:** The app works without any configuration using local D-Bus detection.
 
 ---
 
