@@ -8,43 +8,52 @@ set -e
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 info() { echo -e "${BLUE}▸${NC} $1"; }
 success() { echo -e "${GREEN}✓${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1"; exit 1; }
 
 # Check dependencies
 if ! command -v python3 &> /dev/null; then
-    echo "Error: python3 not found"
-    exit 1
+    error "python3 not found"
 fi
 
 # Create build directory
-BUILD_DIR="dist"
+BUILD_DIR="build-output"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-info "Installing PyInstaller..."
+# Create venv for building
+BUILD_VENV=".build-venv"
+rm -rf "$BUILD_VENV"
+info "Creating build environment..."
+python3 -m venv "$BUILD_VENV"
+source "$BUILD_VENV/bin/activate"
+
+# Install all dependencies
+info "Installing dependencies..."
 pip install pyinstaller --quiet --disable-pip-version-check
+pip install -e . --quiet --disable-pip-version-check
 
 info "Building binary..."
 pyinstaller \
     --onefile \
     --name ethereal-lyrics \
     --add-data "src:src" \
-    --hidden-import src.main \
-    --hidden-import src.config \
-    --hidden-import src.terminal_ui \
-    --hidden-import src.lyrics_fetcher \
-    --hidden-import src.local_spotify \
-    --hidden-import src.spotify_client \
-    --clean \
+    --paths . \
     --noconfirm \
-    src/main.py 2>/dev/null
+    --clean \
+    run.py
 
-# Move binary to dist
-mv dist/ethereal-lyrics "$BUILD_DIR/"
-rm -rf build ethereal-lyrics.spec
+# Move binary to build directory
+cp dist/ethereal-lyrics "$BUILD_DIR/"
+rm -rf build dist ethereal-lyrics.spec
+
+# Cleanup
+deactivate
+rm -rf "$BUILD_VENV"
 
 success "Binary built: $BUILD_DIR/ethereal-lyrics"
 echo ""
