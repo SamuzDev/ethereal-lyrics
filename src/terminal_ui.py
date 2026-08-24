@@ -604,21 +604,63 @@ class TerminalUI:
         lines: list[Any],
         progress_ms: int,
         is_synced: bool,
+        lyrics: Any = None,
     ) -> int:
         if not lines:
             return -1
 
         if is_synced:
-            adjusted = progress_ms + self._offset_ms
+            # Get effective offset (static + dynamic)
+            offset = self._offset_ms
+            if lyrics and hasattr(lyrics, 'get_effective_offset'):
+                offset = lyrics.get_effective_offset()
+
+            # Use improved interpolation with offset
+            adjusted = progress_ms - offset
             idx = -1
             for i, line in enumerate(lines):
                 if line.start_ms is not None and line.start_ms <= adjusted:
                     idx = i
+                elif line.start_ms is not None and line.start_ms > adjusted:
+                    break
             return idx
         else:
             line_duration_ms = 5000
             idx = (progress_ms // line_duration_ms) % len(lines)
             return int(idx)
+
+    def _get_interpolated_word_index(
+        self,
+        lines: list[Any],
+        progress_ms: int,
+        is_synced: bool,
+        current_idx: int,
+    ) -> int:
+        """Get word index based on interpolation for smoother sync."""
+        if not is_synced or current_idx < 0 or current_idx >= len(lines):
+            return 0
+
+        line = lines[current_idx]
+        if not hasattr(line, '_word_positions') or not line._word_positions:
+            return 0
+
+        adjusted = progress_ms + self._offset_ms
+        if line.start_ms is None or line.end_ms is None:
+            return 0
+
+        duration = line.end_ms - line.start_ms
+        if duration <= 0:
+            return 0
+
+        elapsed = adjusted - line.start_ms
+        ratio = max(0.0, min(1.0, elapsed / duration))
+
+        # Map ratio to word index
+        num_words = len(line._word_positions)
+        if num_words == 0:
+            return 0
+
+        return min(int(ratio * num_words), num_words - 1)
 
     def _build_frame(
         self,
@@ -635,17 +677,23 @@ class TerminalUI:
             width, height = 80, 24
 
         if lyrics is None or not lyrics:
-            text.append("\n\n\n  No lyrics available\n\n\n", style="bold white")
+            pad = (height - 7) // 2
+            text.append("\n" * pad, style="bold white")
+            text.append(" " * ((width - 3) // 2) + "...", style="bold white")
+            text.append("\n" * (height - pad - 1), style="bold white")
             return text
 
         lines = lyrics.lines
         is_synced = lyrics.is_synced
         progress_ms = track.progress_ms
 
-        idx = self._get_current_lyric_index(lines, progress_ms, is_synced)
+        idx = self._get_current_lyric_index(lines, progress_ms, is_synced, lyrics)
 
         if idx < 0 or idx >= len(lines):
-            text.append("\n\n\n  Waiting for lyrics...\n\n\n", style="bold white")
+            pad = (height - 7) // 2
+            text.append("\n" * pad, style="bold white")
+            text.append(" " * ((width - 3) // 2) + "...", style="bold white")
+            text.append("\n" * (height - pad - 1), style="bold white")
             return text
 
         line_text = lines[idx].text
@@ -663,11 +711,54 @@ class TerminalUI:
             # For languages without spaces (Japanese, Chinese), split by character
             words = list(line_text)
 
-        if len(words) > 3:
-            now = time.monotonic()
-            if now - self._word_change_time >= 0.8:
-                self._word_index += 1
-                self._word_change_time = now
+        if len(words) > 1:
+            # Calculate word duration based on time to next lyric line
+            if is_synced and idx + 1 < len(lines) and lines[idx + 1].start_ms is not None:
+                line_duration = lines[idx + 1].start_ms - lines[idx].start_ms
+            elif is_synced and lines[idx].end_ms is not None:
+                line_duration = lines[idx].end_ms - lines[idx].start_ms
+            else:
+                line_duration = len(words) * 800  # fallback: 800ms per word
+
+            word_duration_ms = max(600, line_duration // len(words))
+            word_duration_s = word_duration_ms / 1000.0
+
+            # Use interpolation for smoother word transitions
+            if is_synced:
+                # Get effective offset (static + dynamic)
+                offset = self._offset_ms
+                if lyrics and hasattr(lyrics, 'get_effective_offset'):
+                    offset = lyrics.get_effective_offset()
+
+                adjusted = progress_ms - offset
+                current_line = lines[idx]
+                if current_line.start_ms is not None and current_line.end_ms is not None:
+                    duration = current_line.end_ms - current_line.start_ms
+                    if duration > 0:
+                        elapsed = adjusted - current_line.start_ms
+                        ratio = max(0.0, min(1.0, elapsed / duration))
+                        interpolated_idx = min(int(ratio * len(words)), len(words) - 1)
+                        # Use interpolated index if it's different from time-based
+                        now = time.monotonic()
+                        if now - self._word_change_time >= word_duration_s * 0.8:
+                            self._word_index = interpolated_idx
+                            self._word_change_time = now
+                    else:
+                        now = time.monotonic()
+                        if now - self._word_change_time >= word_duration_s:
+                            self._word_index += 1
+                            self._word_change_time = now
+                else:
+                    now = time.monotonic()
+                    if now - self._word_change_time >= word_duration_s:
+                        self._word_index += 1
+                        self._word_change_time = now
+            else:
+                now = time.monotonic()
+                if now - self._word_change_time >= word_duration_s:
+                    self._word_index += 1
+                    self._word_change_time = now
+
             if self._word_index >= len(words):
                 self._word_index = 0
             display_word = words[self._word_index]
@@ -676,19 +767,18 @@ class TerminalUI:
 
         big_lines = render_big(display_word, width - 4)
 
-        total_height = 7
+        total_height = len(big_lines)
         pad_top = max(0, (height - total_height) // 2)
 
-        for _ in range(pad_top):
-            text.append("\n", style="bold white")
+        text.append("\n" * pad_top, style="bold white")
 
         for line in big_lines:
             line_width = len(line)
             pad_left = max(0, (width - line_width) // 2)
             text.append(" " * pad_left + line + "\n", style="bold white")
 
-        remaining = height - pad_top - total_height
-        for _ in range(max(0, remaining)):
-            text.append("\n", style="bold white")
+        remaining = height - pad_top - total_height - 1
+        if remaining > 0:
+            text.append("\n" * remaining, style="bold white")
 
         return text

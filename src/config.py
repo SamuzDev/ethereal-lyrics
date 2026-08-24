@@ -1,4 +1,4 @@
-"""Configuration management for lyrica."""
+"""Configuration management for ethereal lyrics."""
 
 from pathlib import Path
 from pydantic_settings import BaseSettings
@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     # LRCLib API (free, no auth needed)
     lrclib_base_url: str = "https://lrclib.net/api"
 
+    # Musixmatch API (free tier: 2000 requests/day)
+    # Get your API key at: https://developer.musixmatch.com/
+    musixmatch_api_key: str = Field(default="", env="MUSIXMATCH_API_KEY")
+
+    # Genius API (free tier available)
+    # Get your access token at: https://genius.com/api-clients
+    genius_access_token: str = Field(default="", env="GENIUS_ACCESS_TOKEN")
+
     # Terminal UI settings
     lyric_color: str = Field(default="white", env="LYRIC_COLOR")
     highlight_color: str = Field(default="bold white", env="HIGHLIGHT_COLOR")
@@ -26,7 +34,7 @@ class Settings(BaseSettings):
     sync_tolerance_ms: int = 200
 
     # Lyric timing offset in milliseconds (positive = lyrics appear later)
-    lyric_offset_ms: int = Field(default=0, env="LYRIC_OFFSET_MS")
+    lyric_offset_ms: int = Field(default=1000, env="LYRIC_OFFSET_MS")
 
     class Config:
         env_file = ".env"

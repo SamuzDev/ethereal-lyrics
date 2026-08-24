@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from .config import get_settings
 from .spotify_client import SpotifyClient, Track
 from .local_spotify import LocalSpotifyClient, LocalTrack
-from .lyrics_fetcher import LyricsFetcher, Lyrics
+from .lyrics_fetcher import MultiProviderLyricsFetcher, Lyrics
 from .terminal_ui import TerminalUI
 
 
@@ -39,7 +39,11 @@ class EtherealLyrics:
         self.settings = get_settings()
 
         # Initialize lyrics fetcher and UI
-        self.lyrics_fetcher = LyricsFetcher(self.settings.lrclib_base_url)
+        self.lyrics_fetcher = MultiProviderLyricsFetcher(
+            musixmatch_api_key=self.settings.musixmatch_api_key,
+            genius_access_token=self.settings.genius_access_token,
+            static_offset_ms=self.settings.lyric_offset_ms,
+        )
         self.ui = TerminalUI(offset_ms=self.settings.lyric_offset_ms)
 
         # Try local detection first (no credentials needed)
@@ -82,7 +86,7 @@ class EtherealLyrics:
         self.ui.console.clear()
         sys.exit(0)
 
-    def _fetch_lyrics_for_track(self, name: str, artist: str, album: str, duration_ms: int) -> Lyrics | None:
+    def _fetch_lyrics_for_track(self, name: str, artist: str, album: str, duration_ms: int, track_id: str | None = None) -> Lyrics | None:
         """Fetch lyrics for the given track."""
         # Split artists (Spotify returns them comma-separated)
         artist_name = artist.split(",")[0].strip()
@@ -92,6 +96,7 @@ class EtherealLyrics:
             artist_name=artist_name,
             album_name=album,
             duration_ms=duration_ms,
+            track_id=track_id,
         )
 
     def _get_local_track(self) -> LocalTrack | None:
@@ -163,9 +168,14 @@ class EtherealLyrics:
                 # Check if track changed
                 if track_id != self._current_track_id:
                     self._current_track_id = track_id
+                    self.lyrics_fetcher.reset_timing(track_id)
                     self._current_lyrics = self._fetch_lyrics_for_track(
-                        name, artist, album, duration_ms
+                        name, artist, album, duration_ms, track_id
                     )
+
+                # Update dynamic offset with current position
+                if track_id:
+                    self.lyrics_fetcher.update_timing(track_id, progress_ms)
 
                 # Render
                 self.ui.render(render_track, self._current_lyrics)
