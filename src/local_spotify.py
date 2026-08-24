@@ -93,9 +93,9 @@ class LocalSpotifyClient:
     def get_interpolated_position(self) -> int:
         """Get position interpolated between D-Bus reads.
 
-        Uses wall-clock extrapolation for smooth updates, with periodic
-        re-anchoring to the real D-Bus position to prevent drift.
-        Discards outlier readings that differ too much from expected.
+        Always uses wall-clock extrapolation when playing for smooth,
+        accurate position tracking. Only anchors to D-Bus on first read
+        and to correct drift periodically.
         """
         status = self._get_playback_status()
         self._is_playing = status == "Playing"
@@ -105,19 +105,15 @@ class LocalSpotifyClient:
 
         if self._is_playing and self._last_read_time > 0 and self._anchored:
             elapsed_ms = int((now - self._last_read_time) * 1000)
-            expected = self._last_position + elapsed_ms
+            position = self._last_position + elapsed_ms
 
-            # Discard outlier readings (>500ms off from expected)
-            if abs(real_pos - expected) > 500:
-                position = expected
-            else:
-                position = real_pos
-
-            # Re-anchor every 5 polls (~2.5s) to correct drift
+            # Periodically correct drift from D-Bus (every ~5s)
             self._poll_count += 1
-            if self._poll_count >= 5:
+            if self._poll_count >= 100:
                 self._poll_count = 0
-                position = real_pos
+                # Blend: 90% interpolated + 10% real (smooth correction)
+                position = int(position * 0.9 + real_pos * 0.1)
+                self._last_position = position
         else:
             position = real_pos
             self._anchored = True

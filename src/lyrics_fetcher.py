@@ -71,7 +71,7 @@ class DynamicOffset:
     _track_start_time: float = 0.0
     _last_track_id: str = ""
     _calibrated_offset: int = 0
-    _min_samples: int = 3
+    _min_samples: int = 2
     _max_samples: int = 10
 
     _speed_history: list[float] = field(default_factory=list)
@@ -159,7 +159,7 @@ class DynamicOffset:
 
         Returns offset in milliseconds. Negative = lyrics should appear earlier.
         """
-        if len(self._samples) < self._min_samples:
+        if len(self._samples) < 2:
             return 0
 
         n = len(self._samples)
@@ -178,17 +178,21 @@ class DynamicOffset:
         drift_rate = (total_position_ms / total_time_ms) - 1.0
 
         # Calculate average offset from drift
-        avg_drift_ms = int(drift_rate * total_time_ms * 0.3)
+        avg_drift_ms = int(drift_rate * total_time_ms * 0.5)
 
         # Get speed-based adjustment
         speed_adj = self._calculate_speed_adjustment()
 
         # Combine drift and speed adjustments
-        combined = int(avg_drift_ms * 0.6 + speed_adj * 0.4)
+        combined = int(avg_drift_ms * 0.7 + speed_adj * 0.3)
 
-        # Smooth the final offset (faster convergence at start)
+        # Faster convergence: use more aggressive factor early on
+        if n < 5:
+            factor = 0.7  # 70% new, 30% old (fast convergence)
+        else:
+            factor = 0.5  # 50/50 (stable)
         self._calibrated_offset = int(
-            self._calibrated_offset * 0.5 + combined * 0.5
+            self._calibrated_offset * (1 - factor) + combined * factor
         )
 
         return self._calibrated_offset
