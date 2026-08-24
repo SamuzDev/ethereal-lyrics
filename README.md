@@ -33,6 +33,12 @@ https://private-user-images.githubusercontent.com/108047432/640066507-b70bee4d-2
 curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash
 ```
 
+### Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash -s -- uninstall
+```
+
 ### Or clone and install
 
 ```bash

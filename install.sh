@@ -1,154 +1,124 @@
 #!/usr/bin/env bash
 
 # ethereal-lyrics installer
-# Synced Spotify lyrics for your terminal
+# Usage: curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash
 
 set -e
 
 # Colors
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-PINK='\033[1;35m'
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 DIM='\033[2m'
 NC='\033[0m'
 
-show_banner() {
-    clear
-    echo ""
-    echo -e "${PURPLE}    ╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${PURPLE}    ║${CYAN}     ███████╗██████╗ ██╗   ██╗███████╗██╗     ██╗          ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${CYAN}     ██╔════╝██╔══██╗██║   ██║██╔════╝██║     ██║          ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${CYAN}     █████╗  ██████╔╝██║   ██║█████╗  ██║     ██║          ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${CYAN}     ██╔══╝  ██╔══██╗██║   ██║██╔══╝  ██║     ██║          ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${CYAN}     ██║     ██║  ██║╚██████╔╝██║     ███████╗███████╗     ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${CYAN}     ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚══════╝╚══════╝     ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${PINK}     ██████╗██╗     ██╗██████╗ ███████╗██████╗             ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${PINK}    ██╔════╝██║     ██║██╔══██╗██╔════╝██╔══██╗            ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${PINK}    ██║     ██║     ██║██████╔╝█████╗  ██████╔╝            ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${PINK}    ██║     ██║     ██║██╔═══╝ ██╔══╝  ██╔══██╗            ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${PINK}    ╚██████╗███████╗██║██║     ███████╗██║  ██║            ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║${PINK}     ╚═════╝╚══════╝╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝            ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║                                                           ║${NC}"
-    echo -e "${PURPLE}    ║${DIM}           Synced Spotify lyrics for your terminal          ${PURPLE}║${NC}"
-    echo -e "${PURPLE}    ║                                                           ║${NC}"
-    echo -e "${PURPLE}    ╚═══════════════════════════════════════════════════════════╝${NC}"
-    echo ""
+# Constants
+REPO="SamuzDev/ethereal-lyrics"
+INSTALL_DIR="$HOME/.local/share/ethereal-lyrics"
+BIN_DIR="$HOME/.local/bin"
+
+# Helpers
+info() { echo -e "${BLUE}▸${NC} $1"; }
+success() { echo -e "${GREEN}✓${NC} $1"; }
+warn() { echo -e "${YELLOW}!${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1"; exit 1; }
+
+# Check dependencies
+check_deps() {
+    local missing=()
+    
+    command -v python3 &> /dev/null || missing+=("python3")
+    command -v pip3 &> /dev/null || missing+=("pip3")
+    command -v git &> /dev/null || missing+=("git")
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        error "Missing: ${missing[*]}. Install them first."
+    fi
 }
 
+# Install
 install() {
-    echo -e "${CYAN}Installing ethereal-lyrics...${NC}\n"
+    echo ""
+    echo -e "${PURPLE}    ╔═══════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}    ║${CYAN}        ████████╗███████╗██████╗ ███╗   ███╗       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}    ║${CYAN}        ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}    ║${CYAN}           ██║   █████╗  ██████╔╝██╔████╔██║       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}    ║${CYAN}           ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}    ║${CYAN}           ██║   ███████╗██║  ██║██║ ╚═╝ ██║       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}    ║${CYAN}           ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝       ${PURPLE}║${NC}"
+    echo -e "${PURPLE}    ╚═══════════════════════════════════════════════════╝${NC}"
+    echo ""
     
-    # Clone repo
-    echo -e "${DIM}Cloning repository...${NC}"
-    rm -rf /tmp/ethereal-lyrics
-    git clone --depth 1 https://github.com/SamuzDev/ethereal-lyrics.git /tmp/ethereal-lyrics 2>/dev/null
+    # Check dependencies
+    info "Checking dependencies..."
+    check_deps
+    success "Dependencies OK"
     
-    cd /tmp/ethereal-lyrics
+    # Remove old installation
+    if [ -d "$INSTALL_DIR" ]; then
+        info "Removing old installation..."
+        rm -rf "$INSTALL_DIR"
+    fi
+    
+    # Clone repository
+    info "Downloading ethereal-lyrics..."
+    git clone --depth 1 "https://github.com/${REPO}.git" "$INSTALL_DIR" 2>/dev/null
     
     # Create virtual environment
-    echo -e "${DIM}Creating virtual environment...${NC}"
+    info "Setting up Python environment..."
+    cd "$INSTALL_DIR"
     python3 -m venv venv
     source venv/bin/activate
     
     # Install dependencies
-    echo -e "${DIM}Installing dependencies...${NC}"
-    pip install -e . --quiet
+    info "Installing dependencies..."
+    pip install -e . --quiet --disable-pip-version-check
     
     # Create wrapper script
-    mkdir -p ~/.local/bin
-    cat > ~/.local/bin/ethereal-lyrics << 'WRAPPER'
+    info "Creating launcher..."
+    mkdir -p "$BIN_DIR"
+    cat > "$BIN_DIR/ethereal-lyrics" << 'EOF'
 #!/bin/bash
-source /tmp/ethereal-lyrics/venv/bin/activate
+source "$HOME/.local/share/ethereal-lyrics/venv/bin/activate"
 python -m src.main "$@"
-WRAPPER
-    chmod +x ~/.local/bin/ethereal-lyrics
-    
-    echo -e "\n${GREEN}✓ Installation complete!${NC}"
-    echo -e "\n${CYAN}Run with: ${WHITE}ethereal-lyrics${NC}"
-    echo -e "${DIM}Or: python -m src.main${NC}\n"
-}
-
-configure() {
-    echo -e "\n${CYAN}Spotify API Configuration${NC}\n"
-    
-    echo -e "${DIM}Follow these steps:${NC}\n"
-    echo -e "  ${YELLOW}1.${NC} Go to ${CYAN}https://developer.spotify.com/dashboard${NC}"
-    echo -e "  ${YELLOW}2.${NC} Create a new app"
-    echo -e "  ${YELLOW}3.${NC} Set redirect URI to: ${CYAN}http://localhost:8888/callback${NC}"
-    echo -e "  ${YELLOW}4.${NC} Copy your Client ID and Client Secret\n"
-    
-    read -p "Client ID: " client_id
-    read -p "Client Secret: " client_secret
-    
-    # Create .env file
-    mkdir -p ~/.config/ethereal-lyrics
-    cat > ~/.config/ethereal-lyrics/.env << EOF
-SPOTIFY_CLIENT_ID=$client_id
-SPOTIFY_CLIENT_SECRET=$client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
-LYRIC_OFFSET_MS=1000
 EOF
+    chmod +x "$BIN_DIR/ethereal-lyrics"
     
-    echo -e "\n${GREEN}✓ Configuration saved!${NC}\n"
-}
-
-uninstall() {
-    echo -e "\n${CYAN}Uninstalling ethereal-lyrics...${NC}\n"
+    # Check if bin is in PATH
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        warn "Add to your shell config:"
+        echo -e "  ${DIM}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+    fi
     
-    rm -f ~/.local/bin/ethereal-lyrics
-    rm -rf /tmp/ethereal-lyrics
-    pip3 uninstall ethereal-lyrics -y 2>/dev/null || true
-    
-    echo -e "\n${GREEN}✓ Uninstalled successfully${NC}\n"
-}
-
-show_menu() {
-    echo -e "${CYAN}╔$(printf '═%.0s' $(seq 1 50))╗${NC}"
-    echo -e "${CYAN}║${WHITE}                    OPTIONS                           ${CYAN}║${NC}"
-    echo -e "${CYAN}╠$(printf '═%.0s' $(seq 1 50))╣${NC}"
-    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${GREEN}[1]${NC}  Install                                           ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${GREEN}[2]${NC}  Configure Spotify API                            ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${RED}[3]${NC}  Uninstall                                        ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${DIM}[4]${NC}  Exit                                             ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}                                                          ${CYAN}║${NC}"
-    echo -e "${CYAN}╚$(printf '═%.0s' $(seq 1 50))╝${NC}"
+    echo ""
+    success "Installation complete!"
+    echo ""
+    echo -e "  Run: ${WHITE}ethereal-lyrics${NC}"
     echo ""
 }
 
-main() {
-    show_banner
+# Uninstall
+uninstall() {
+    echo ""
+    info "Uninstalling ethereal-lyrics..."
     
-    while true; do
-        show_menu
-        read -p "Select option [1-4]: " choice
-        
-        case $choice in
-            1)
-                install
-                ;;
-            2)
-                configure
-                ;;
-            3)
-                uninstall
-                ;;
-            4)
-                echo -e "\n${GREEN}Thanks for using ethereal-lyrics!${NC}\n"
-                exit 0
-                ;;
-            *)
-                echo -e "${RED}Invalid option${NC}"
-                ;;
-        esac
-        
-        read -p "Press Enter to continue..." _
-        show_banner
-    done
+    rm -f "$BIN_DIR/ethereal-lyrics"
+    rm -rf "$INSTALL_DIR"
+    
+    success "Uninstalled!"
+    echo ""
 }
 
-main "$@"
+# Main
+case "${1:-install}" in
+    install) install ;;
+    uninstall) uninstall ;;
+    *)
+        echo "Usage: $0 [install|uninstall]"
+        exit 1
+        ;;
+esac
