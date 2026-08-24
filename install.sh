@@ -56,12 +56,8 @@ is_up_to_date() {
     if [ ! -f "$BIN_DIR/$BINARY_NAME" ]; then
         return 1
     fi
-    local installed_version
-    installed_version=$("$BIN_DIR/$BINARY_NAME" --check-update 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "")
-    if [ -z "$installed_version" ]; then
-        return 1
-    fi
-    return 0
+    "$BIN_DIR/$BINARY_NAME" --check-update 2>/dev/null
+    [ $? -eq 0 ]
 }
 
 # Install binary
@@ -212,9 +208,10 @@ install() {
     success "Installation complete!"
     echo ""
     echo -e "  Run:       ${WHITE}ethereal-lyrics${NC}"
-    echo -e "  Update:    ${WHITE}ethereal-lyrics --update${NC}"
-    echo -e "  Debug:     ${WHITE}ethereal-lyrics --lyrics${NC}"
-    echo -e "  Help:      ${WHITE}ethereal-lyrics --help${NC}"
+    echo -e "  Update:    ${WHITE}ethereal-lyrics -u${NC}  ${DIM}(--update)${NC}"
+    echo -e "  Debug:     ${WHITE}ethereal-lyrics -l${NC}  ${DIM}(--lyrics)${NC}"
+    echo -e "  Color:     ${WHITE}ethereal-lyrics -C cyan${NC}"
+    echo -e "  Help:      ${WHITE}ethereal-lyrics -h${NC}  ${DIM}(--help)${NC}"
     echo ""
 }
 

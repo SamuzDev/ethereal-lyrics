@@ -13,7 +13,8 @@ Usage:
 Options:
   -l, --lyrics        Show raw lyrics data for current track
   -u, --update        Update to latest version
-  -C, --color COLOR   Override lyric color (e.g. cyan, magenta)
+  -c, --check-update  Check for available updates
+  -C, --color COLOR   Override lyric color (e.g. cyan, magenta, 196)
   -h, --help          Show this help message
 
 Environment Variables:
@@ -28,7 +29,35 @@ Examples:
   ethereal-lyrics --lyrics
   ethereal-lyrics --update
   ethereal-lyrics --color cyan
+  ethereal-lyrics -C 196
+  ethereal-lyrics -C 'bold magenta'
   LYRIC_COLOR=magenta ethereal-lyrics
+"""
+
+COLOR_HELP = """Color Options:
+  -C, --color COLOR   Set lyric text color
+
+  Named colors:
+    red, green, blue, cyan, magenta, yellow, white
+    bright_red, bright_green, bright_blue, bright_cyan, bright_magenta, bright_yellow
+
+  256-color (by number 1-256):
+    1       red             196     bright red
+    2       green           46      bright green
+    3       yellow          226     bright yellow
+    4       blue            21      bright blue
+    5       magenta         201     bright magenta
+    6       cyan            51      bright cyan
+    7       white           231     bright white
+    8       gray            240     dark gray
+
+  Hex/RGB:
+    '#ff6432'               'rgb(255,100,50)'
+
+  Bold/italic:
+    'bold cyan'             'italic magenta'
+
+  Default: bold white
 """
 
 # Add src to path for absolute imports
@@ -43,6 +72,11 @@ else:
 
 # Parse arguments
 args = sys.argv[1:]
+
+# Handle -C -h (color help)
+if "-C" in args and "-h" in args:
+    print(COLOR_HELP)
+    sys.exit(0)
 
 if "-h" in args or "--help" in args:
     print(HELP_TEXT)
@@ -62,7 +96,7 @@ if "-c" in args or "--check-update" in args:
         current = get_current_version()
         latest = get_latest_version()
         if latest and _parse_version(current) < _parse_version(latest):
-            print(f"Update available: v{current} \u2192 v{latest}")
+            print(f"Update available: v{current} → v{latest}")
             print(f"Run: ethereal-lyrics --update")
             sys.exit(1)
         # Silent if up to date
@@ -82,7 +116,12 @@ if "-l" in args or "--lyrics" in args:
 color_override = None
 for i, arg in enumerate(args):
     if arg in ("-C", "--color") and i + 1 < len(args):
-        color_override = args[i + 1]
+        color_val = args[i + 1]
+        # Accept numbers 1-256
+        if color_val.isdigit() and 1 <= int(color_val) <= 256:
+            color_override = f"color({color_val})"
+        else:
+            color_override = color_val
         os.environ["LYRIC_COLOR"] = color_override
         break
 

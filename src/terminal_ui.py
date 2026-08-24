@@ -52,35 +52,50 @@ def _split_words(text: str) -> list[str]:
     """Split text into words, joining punctuation with adjacent words.
 
     Prevents punctuation marks from appearing as separate words.
-    Leading punctuation moves to the end of the next word:
-    e.g. '?Hello' becomes 'Hello?'
+    e.g. '? Hello' → 'Hello?', 'what is love?' → 'what is love?'
     """
     raw = text.split()
     if not raw:
         return []
 
     punctuation = set("?!.,;:'\")\u00bf\u00a1\u2026")
+    punct_map = {"\u00bf": "?", "\u00a1": "!"}
 
-    # Pass 1: join trailing/inline punctuation with previous word
-    merged: list[str] = []
+    # Parse each token into (leading_punct, core_word, trailing_punct)
+    tokens = []
     for word in raw:
-        if merged and word[0] in punctuation:
-            merged[-1] = merged[-1] + word
-        else:
-            merged.append(word)
+        leading = ""
+        core = word
+        while core and core[0] in punctuation:
+            leading += core[0]
+            core = core[1:]
+        trailing = ""
+        while core and core[-1] in punctuation:
+            trailing = core[-1] + trailing
+            core = core[:-1]
+        tokens.append((leading, core, trailing))
 
-    # Pass 2: move leading punctuation to end of next word
+    # Build result: standalone punct goes to next word's end
     result: list[str] = []
-    i = 0
-    while i < len(merged):
-        word = merged[i]
-        # If word is only punctuation and there's a next word, move it to end
-        if all(c in punctuation for c in word) and i + 1 < len(merged):
-            result.append(merged[i + 1] + word)
-            i += 2
+    pending = ""  # accumulated leading punctuation from standalone tokens
+    for leading, core, trailing in tokens:
+        if not core:
+            # Pure punctuation → accumulate, will attach to next word
+            pending += "".join(punct_map.get(c, c) for c in leading + trailing)
         else:
+            # Word: core + trailing + leading (move leading to end, remap)
+            mapped_leading = "".join(punct_map.get(c, c) for c in leading)
+            word = core + trailing + mapped_leading
+            if pending:
+                word = word + pending
+                pending = ""
             result.append(word)
-            i += 1
+
+    # Remaining pending punctuation
+    if pending and result:
+        result[-1] = result[-1] + pending
+    elif pending:
+        result.append(pending)
 
     return result
 
