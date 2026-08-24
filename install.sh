@@ -34,20 +34,6 @@ success() { echo -e "  ${GREEN}✓${NC} ${BOLD}$1${NC}"; }
 warn() { echo -e "  ${YELLOW}!${NC} $1"; }
 error() { echo -e "  ${RED}✗${NC} $1"; exit 1; }
 
-# Spinner
-spinner() {
-    local pid=$1
-    local delay=0.1
-    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    while [ "$(ps -p $pid -o pid= 2>/dev/null)" ]; do
-        for (( i=0; i<${#spinstr}; i++ )); do
-            printf "\r  ${CYAN}${spinstr:$i:1}${NC} %s" "$2"
-            sleep $delay
-        done
-    done
-    printf "\r"
-}
-
 # Check dependencies
 check_deps() {
     local missing=()
@@ -65,35 +51,26 @@ check_deps() {
 print_banner() {
     clear
     echo ""
-    echo -e "${GRADIENT1}  ╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GRADIENT1}  ║                                                           ║${NC}"
-    echo -e "${GRADIENT1}  ║${CYAN}    _____ _               _                  _             ${GRADIENT1}║${NC}"
-    echo -e "${GRADIENT1}  ║${CYAN}   / ____| |             | |                | |            ${GRADIENT1}║${NC}"
-    echo -e "${GRADIENT1}  ║${CYAN}  | (___ | |__   __ _  __| | ___  _ __   ___| |_ ___ _ __ ${GRADIENT1}║${NC}"
-    echo -e "${GRADIENT1}  ║${CYAN}   \___ \| '_ \ / _\` |/ _\` |/ _ \| '_ \ / _ \ __/ _ \ '__|${GRADIENT1}║${NC}"
-    echo -e "${GRADIENT1}  ║${CYAN}   ____) | | | | (_| | (_| | (_) | | | |  __/ ||  __/ |   ${GRADIENT1}║${NC}"
-    echo -e "${GRADIENT1}  ║${CYAN}  |_____/|_| |_|\__,_|\__,_|\___/|_| |_|\___|\__\___|_|   ${GRADIENT1}║${NC}"
-    echo -e "${GRADIENT1}  ║                                                           ║${NC}"
-    echo -e "${GRADIENT2}  ║${PINK}     ${BOLD}✦ Synced Spotify lyrics for your terminal${NC}${PINK} ✦          ${GRADIENT2}║${NC}"
-    echo -e "${GRADIENT1}  ║                                                           ║${NC}"
-    echo -e "${GRADIENT1}  ╚═══════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${PURPLE}  ╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}  ║                                                           ║${NC}"
+    echo -e "${PURPLE}  ║${CYAN}${BOLD}     ███████╗██████╗ ██╗   ██╗███████╗██╗     ██╗          ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${CYAN}${BOLD}     ██╔════╝██╔══██╗██║   ██║██╔════╝██║     ██║          ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${CYAN}${BOLD}     █████╗  ██████╔╝██║   ██║█████╗  ██║     ██║          ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${CYAN}${BOLD}     ██╔══╝  ██╔══██╗██║   ██║██╔══╝  ██║     ██║          ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${CYAN}${BOLD}     ██║     ██║  ██║╚██████╔╝██║     ███████╗███████╗     ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${CYAN}${BOLD}     ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚══════╝╚══════╝     ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║                                                           ║${NC}"
+    echo -e "${PURPLE}  ║${PINK}${BOLD}     ██████╗██╗     ██╗██████╗ ███████╗██████╗             ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${PINK}${BOLD}    ██╔════╝██║     ██║██╔══██╗██╔════╝██╔══██╗            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${PINK}${BOLD}    ██║     ██║     ██║██████╔╝█████╗  ██████╔╝            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${PINK}${BOLD}    ██║     ██║     ██║██╔═══╝ ██╔══╝  ██╔══██╗            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${PINK}${BOLD}    ╚██████╗███████╗██║██║     ███████╗██║  ██║            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║${PINK}${BOLD}     ╚═════╝╚══════╝╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝            ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║                                                           ║${NC}"
+    echo -e "${PURPLE}  ║${DIM}          Synced Spotify lyrics for your terminal           ${PURPLE}║${NC}"
+    echo -e "${PURPLE}  ║                                                           ║${NC}"
+    echo -e "${PURPLE}  ╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-}
-
-# Progress bar
-progress_bar() {
-    local current=$1
-    local total=$2
-    local width=40
-    local percentage=$((current * 100 / total))
-    local filled=$((current * width / total))
-    local empty=$((width - filled))
-    
-    printf "\r  ${CYAN}[${GREEN}"
-    printf "%${filled}s" | tr ' ' '█'
-    printf "${NC}"
-    printf "%${empty}s" | tr ' ' '░'
-    printf "${CYAN}]${NC} ${WHITE}%3d%%${NC}" "$percentage"
 }
 
 # Install
@@ -152,12 +129,12 @@ EOF
     fi
     
     echo ""
-    echo -e "${GRADIENT1}  ═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${PURPLE}  ═══════════════════════════════════════════════════════════${NC}"
     success "${BOLD}Installation complete!${NC}"
     echo ""
     echo -e "  ${CYAN}→${NC} Run: ${WHITE}ethereal-lyrics${NC}"
     echo -e "  ${CYAN}→${NC} Docs: ${WHITE}https://github.com/${REPO}${NC}"
-    echo -e "${GRADIENT1}  ═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${PURPLE}  ═══════════════════════════════════════════════════════════${NC}"
     echo ""
 }
 
