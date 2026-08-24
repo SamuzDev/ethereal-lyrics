@@ -14,6 +14,26 @@ from rich.text import Text
 from .font import FONT
 
 
+def _make_text_glyph(ch: str) -> list[str]:
+    """Create a 7-row block glyph for characters not in FONT.
+
+    Renders the character as centered text within a block-art frame.
+    """
+    S = "\u2588"
+    display = ch if len(ch) <= 2 else ch[:2]
+    # Pad to 6 chars for consistent width
+    padded = display.center(6)
+    glyph = [""] * 7
+    glyph[0] = " " * 6
+    glyph[1] = " " * 6
+    glyph[2] = padded
+    glyph[3] = padded
+    glyph[4] = padded
+    glyph[5] = " " * 6
+    glyph[6] = " " * 6
+    return glyph
+
+
 def render_big(text: str, max_width: int) -> list[str]:
     normalized = text.upper()
     for ch in "\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00fc":
@@ -24,7 +44,7 @@ def render_big(text: str, max_width: int) -> list[str]:
         if ch in FONT:
             glyphs.append(FONT[ch])
         else:
-            glyphs.append(FONT.get("?", FONT[" "]))
+            glyphs.append(_make_text_glyph(ch))
 
     if not glyphs:
         return [""] * 7
