@@ -66,7 +66,7 @@ install_binary() {
     mkdir -p "$BIN_DIR"
     
     # Download binary
-    if ! curl -L "$url" -o "$BIN_DIR/$BINARY_NAME" 2>/dev/null; then
+    if ! curl -sL "$url" -o "$BIN_DIR/$BINARY_NAME"; then
         error "Failed to download binary. Check your internet connection."
     fi
     
