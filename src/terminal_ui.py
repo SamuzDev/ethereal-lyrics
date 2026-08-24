@@ -51,8 +51,9 @@ def render_big(text: str, max_width: int) -> list[str]:
 def _split_words(text: str) -> list[str]:
     """Split text into words, joining punctuation with adjacent words.
 
-    Prevents punctuation marks from appearing as separate words
-    at the start or end of the display.
+    Prevents punctuation marks from appearing as separate words.
+    Leading punctuation moves to the end of the next word:
+    e.g. '?Hello' becomes 'Hello?'
     """
     raw = text.split()
     if not raw:
@@ -68,14 +69,14 @@ def _split_words(text: str) -> list[str]:
         else:
             merged.append(word)
 
-    # Pass 2: join leading punctuation with next word
+    # Pass 2: move leading punctuation to end of next word
     result: list[str] = []
     i = 0
     while i < len(merged):
         word = merged[i]
-        # If word is only punctuation and there's a next word, join them
+        # If word is only punctuation and there's a next word, move it to end
         if all(c in punctuation for c in word) and i + 1 < len(merged):
-            result.append(word + merged[i + 1])
+            result.append(merged[i + 1] + word)
             i += 2
         else:
             result.append(word)
