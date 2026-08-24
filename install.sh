@@ -43,15 +43,15 @@ check_deps() {
 # Install
 install() {
     echo ""
-    echo -e "${PURPLE}╔═════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${PURPLE}║                                                             ║${NC}"
-    echo -e "${PURPLE}║${CYAN}      _____    __  __  _____  _      __    __                ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}       \_   \/\ \ \/ _\/__   \/_\    / /   / /               ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}        / /\/  \/ /\ \   / /\//_\\  / /   / /                ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}     /\/ /_/ /\  / _\ \ / / /  _  \/ /___/ /___              ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║${CYAN}     \____/\_\ \/  \__/ \/  \_/ \_/\____/\____/              ${PURPLE}║${NC}"
-    echo -e "${PURPLE}║                                                             ║${NC}"
-    echo -e "${PURPLE}╚═════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${PURPLE}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${PURPLE}║                                                              ║${NC}"
+    echo -e "${PURPLE}║${CYAN}       _____    __  __  _____  _      __    __                 ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}        \_   \/\ \ \/ _\/__   \/_\    / /   / /                ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}         / /\/  \/ /\ \   / /\//_\\  / /   / /                 ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}      /\/ /_/ /\  / _\ \ / / /  _  \/ /___/ /___               ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${CYAN}      \____/\_\ \/  \__/ \/  \_/ \_/\____/\____/               ${PURPLE}║${NC}"
+    echo -e "${PURPLE}║                                                              ║${NC}"
+    echo -e "${PURPLE}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
     # Check dependencies
