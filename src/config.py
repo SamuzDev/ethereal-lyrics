@@ -18,6 +18,8 @@ class Settings(BaseSettings):
 
     lyric_offset_ms: int = Field(default=1000, env="LYRIC_OFFSET_MS")
 
+    lyric_color: str = Field(default="bold white", env="LYRIC_COLOR")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

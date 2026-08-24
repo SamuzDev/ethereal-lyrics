@@ -48,14 +48,35 @@ def render_big(text: str, max_width: int) -> list[str]:
     return rows
 
 
+def _split_words(text: str) -> list[str]:
+    """Split text into words, joining punctuation with preceding word.
+
+    This prevents punctuation marks like ? ! . , from appearing
+    as separate words at the start of the display.
+    """
+    raw = text.split()
+    if not raw:
+        return []
+
+    punctuation = set("?!.,;:'\")\u00bf\u00a1\u2026")
+    result: list[str] = []
+    for word in raw:
+        if result and word[0] in punctuation:
+            result[-1] = result[-1] + word
+        else:
+            result.append(word)
+    return result
+
+
 class TerminalUI:
-    def __init__(self, offset_ms: int = 0) -> None:
+    def __init__(self, offset_ms: int = 0, color: str = "bold white") -> None:
         self.console = Console()
-        self._live: Optional[Live] = None
+        self._live: Live | None = None
         self._prev_lyric_idx: int = -1
         self._word_index: int = 0
         self._word_change_time: float = time.monotonic()
         self._offset_ms = offset_ms
+        self._color = color
 
     def render(
         self,
@@ -79,11 +100,9 @@ class TerminalUI:
         self.console.clear()
 
     def print_error(self, msg: str) -> None:
-        """Print an error message."""
         self.console.print(f"[red]\u2717[/red] {msg}")
 
     def print_info(self, msg: str) -> None:
-        """Print an info message."""
         self.console.print(f"[blue]\u25b8[/blue] {msg}")
 
     def _get_current_lyric_index(
@@ -97,12 +116,10 @@ class TerminalUI:
             return -1
 
         if is_synced:
-            # Get effective offset (static + dynamic)
             offset = self._offset_ms
             if lyrics and hasattr(lyrics, 'get_effective_offset'):
                 offset = lyrics.get_effective_offset()
 
-            # Use improved interpolation with offset
             adjusted = progress_ms - offset
             idx = -1
             for i, line in enumerate(lines):
@@ -115,39 +132,6 @@ class TerminalUI:
             line_duration_ms = 5000
             idx = (progress_ms // line_duration_ms) % len(lines)
             return int(idx)
-
-    def _get_interpolated_word_index(
-        self,
-        lines: list[Any],
-        progress_ms: int,
-        is_synced: bool,
-        current_idx: int,
-    ) -> int:
-        """Get word index based on interpolation for smoother sync."""
-        if not is_synced or current_idx < 0 or current_idx >= len(lines):
-            return 0
-
-        line = lines[current_idx]
-        if not hasattr(line, '_word_positions') or not line._word_positions:
-            return 0
-
-        adjusted = progress_ms + self._offset_ms
-        if line.start_ms is None or line.end_ms is None:
-            return 0
-
-        duration = line.end_ms - line.start_ms
-        if duration <= 0:
-            return 0
-
-        elapsed = adjusted - line.start_ms
-        ratio = max(0.0, min(1.0, elapsed / duration))
-
-        # Map ratio to word index
-        num_words = len(line._word_positions)
-        if num_words == 0:
-            return 0
-
-        return min(int(ratio * num_words), num_words - 1)
 
     def _build_frame(
         self,
@@ -165,9 +149,9 @@ class TerminalUI:
 
         if lyrics is None or not lyrics:
             pad = (height - 7) // 2
-            text.append("\n" * pad, style="bold white")
-            text.append(" " * ((width - 3) // 2) + "...", style="bold white")
-            text.append("\n" * (height - pad - 1), style="bold white")
+            text.append("\n" * pad, style=self._color)
+            text.append(" " * ((width - 3) // 2) + "...", style=self._color)
+            text.append("\n" * (height - pad - 1), style=self._color)
             return text
 
         lines = lyrics.lines
@@ -178,9 +162,9 @@ class TerminalUI:
 
         if idx < 0 or idx >= len(lines):
             pad = (height - 7) // 2
-            text.append("\n" * pad, style="bold white")
-            text.append(" " * ((width - 3) // 2) + "...", style="bold white")
-            text.append("\n" * (height - pad - 1), style="bold white")
+            text.append("\n" * pad, style=self._color)
+            text.append(" " * ((width - 3) // 2) + "...", style=self._color)
+            text.append("\n" * (height - pad - 1), style=self._color)
             return text
 
         line_text = lines[idx].text
@@ -190,29 +174,28 @@ class TerminalUI:
             self._word_index = 0
             self._word_change_time = time.monotonic()
 
-        # Detect if text has spaces (romance languages) or not (Japanese, Chinese, etc.)
         has_spaces = " " in line_text
         if has_spaces:
-            words = line_text.split()
+            words = _split_words(line_text)
         else:
-            # For languages without spaces (Japanese, Chinese), split by character
             words = list(line_text)
 
-        if len(words) > 1:
-            # Calculate word duration based on time to next lyric line
+        if not words:
+            big_lines = [""] * 7
+        elif len(words) == 1:
+            big_lines = render_big(words[0], width - 4)
+        else:
             if is_synced and idx + 1 < len(lines) and lines[idx + 1].start_ms is not None:
                 line_duration = lines[idx + 1].start_ms - lines[idx].start_ms
             elif is_synced and lines[idx].end_ms is not None:
                 line_duration = lines[idx].end_ms - lines[idx].start_ms
             else:
-                line_duration = len(words) * 800  # fallback: 800ms per word
+                line_duration = len(words) * 800
 
-            word_duration_ms = max(600, line_duration // len(words))
+            word_duration_ms = max(300, line_duration // len(words))
             word_duration_s = word_duration_ms / 1000.0
 
-            # Use interpolation for smoother word transitions
             if is_synced:
-                # Get effective offset (static + dynamic)
                 offset = self._offset_ms
                 if lyrics and hasattr(lyrics, 'get_effective_offset'):
                     offset = lyrics.get_effective_offset()
@@ -225,7 +208,6 @@ class TerminalUI:
                         elapsed = adjusted - current_line.start_ms
                         ratio = max(0.0, min(1.0, elapsed / duration))
                         interpolated_idx = min(int(ratio * len(words)), len(words) - 1)
-                        # Use interpolated index if it's different from time-based
                         now = time.monotonic()
                         if now - self._word_change_time >= word_duration_s * 0.8:
                             self._word_index = interpolated_idx
@@ -248,24 +230,21 @@ class TerminalUI:
 
             if self._word_index >= len(words):
                 self._word_index = 0
-            display_word = words[self._word_index]
-        else:
-            display_word = " ".join(words) if has_spaces else "".join(words)
 
-        big_lines = render_big(display_word, width - 4)
+            big_lines = render_big(words[self._word_index], width - 4)
 
         total_height = len(big_lines)
         pad_top = max(0, (height - total_height) // 2)
 
-        text.append("\n" * pad_top, style="bold white")
+        text.append("\n" * pad_top, style=self._color)
 
         for line in big_lines:
             line_width = len(line)
             pad_left = max(0, (width - line_width) // 2)
-            text.append(" " * pad_left + line + "\n", style="bold white")
+            text.append(" " * pad_left + line + "\n", style=self._color)
 
         remaining = height - pad_top - total_height - 1
         if remaining > 0:
-            text.append("\n" * remaining, style="bold white")
+            text.append("\n" * remaining, style=self._color)
 
         return text

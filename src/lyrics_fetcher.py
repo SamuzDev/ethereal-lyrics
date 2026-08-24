@@ -71,8 +71,8 @@ class DynamicOffset:
     _track_start_time: float = 0.0
     _last_track_id: str = ""
     _calibrated_offset: int = 0
-    _min_samples: int = 3
-    _max_samples: int = 15
+    _min_samples: int = 2
+    _max_samples: int = 10
 
     _speed_history: list[float] = field(default_factory=list)
     _max_speed_history: int = 8

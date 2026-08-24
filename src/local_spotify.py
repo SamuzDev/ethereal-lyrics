@@ -1,5 +1,6 @@
 """Local Spotify client using D-Bus MPRIS (no credentials needed)."""
 
+import time
 from dataclasses import dataclass
 
 
@@ -29,14 +30,15 @@ class LocalSpotifyClient:
     PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 
     def __init__(self):
-        """Initialize the local Spotify client."""
         self._bus = None
         self._player = None
         self._properties = None
         self._connected = False
+        self._is_playing = False
+        self._last_position: int = 0
+        self._last_read_time: float = 0.0
 
     def _ensure_connected(self) -> bool:
-        """Try to connect to D-Bus and get Spotify player interface."""
         if self._connected:
             return True
 
@@ -54,7 +56,6 @@ class LocalSpotifyClient:
             return False
 
     def _get_metadata(self) -> dict | None:
-        """Get track metadata from D-Bus."""
         if not self._ensure_connected():
             return None
 
@@ -66,7 +67,6 @@ class LocalSpotifyClient:
             return None
 
     def _get_playback_status(self) -> str | None:
-        """Get playback status from D-Bus."""
         if not self._ensure_connected():
             return None
 
@@ -78,35 +78,49 @@ class LocalSpotifyClient:
             return None
 
     def _get_position(self) -> int:
-        """Get current position in milliseconds."""
+        """Get current position in milliseconds from D-Bus."""
         if not self._ensure_connected():
             return 0
 
         try:
             position = self._properties.Get(self.INTERFACE, "Position")
-            return int(position) // 1000  # microseconds to milliseconds
+            return int(position) // 1000
         except Exception:
             return 0
 
-    def get_current_track(self) -> LocalTrack | None:
-        """Get the currently playing track from local Spotify.
+    def get_interpolated_position(self) -> int:
+        """Get position interpolated between D-Bus reads.
 
-        Returns:
-            LocalTrack object or None if nothing is playing or
-            Spotify is not running.
+        When playing, estimates the current position based on the last
+        D-Bus read plus elapsed wall-clock time, eliminating the
+        systematic lag from polling delay.
         """
+        status = self._get_playback_status()
+        self._is_playing = status == "Playing"
+
+        position = self._get_position()
+        now = time.monotonic()
+
+        if self._is_playing and self._last_read_time > 0:
+            elapsed_ms = int((now - self._last_read_time) * 1000)
+            position = self._last_position + elapsed_ms
+
+        self._last_position = position
+        self._last_read_time = now
+        return position
+
+    def get_current_track(self) -> LocalTrack | None:
+        """Get the currently playing track from local Spotify."""
         metadata = self._get_metadata()
         status = self._get_playback_status()
 
         if metadata is None or status is None:
             return None
 
-        # Extract track info from metadata
         title = str(metadata.get("xesam:title", ""))
         if not title:
             return None
 
-        # Artist can be a list or string
         artist_raw = metadata.get("xesam:artist", "")
         if isinstance(artist_raw, (list, tuple)):
             artist = ", ".join(str(a) for a in artist_raw)
@@ -117,13 +131,12 @@ class LocalSpotifyClient:
         duration_us = int(metadata.get("mpris:length", 0))
         duration_ms = duration_us // 1000
 
-        # Extract track ID from URL if available
         track_id = None
         url = str(metadata.get("mpris:trackid", ""))
         if url.startswith("spotify:track:"):
             track_id = url.split(":")[-1]
 
-        position_ms = self._get_position()
+        position_ms = self.get_interpolated_position()
         is_playing = status == "Playing"
 
         return LocalTrack(
@@ -137,5 +150,4 @@ class LocalSpotifyClient:
         )
 
     def is_spotify_running(self) -> bool:
-        """Check if Spotify is registered on D-Bus."""
         return self._ensure_connected()
