@@ -27,11 +27,16 @@ https://private-user-images.githubusercontent.com/108047432/640066507-b70bee4d-2
 
 ## Quick Install
 
-### One-liner with curl
+### One-liner with curl (recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash
 ```
+
+This will:
+- Download the precompiled binary for your platform (no Python needed)
+- Install to `~/.local/bin/ethereal-lyrics`
+- Auto-add to PATH if needed
 
 ### Uninstall
 
@@ -39,47 +44,15 @@ curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/insta
 curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash -s -- uninstall
 ```
 
-> **Note:** No configuration needed! The app works out of the box with local Spotify detection.
+### Manual installation from source
 
-### Or clone and install
+If you prefer to install from source (requires Python 3.10+):
 
 ```bash
 git clone https://github.com/SamuzDev/ethereal-lyrics.git
 cd ethereal-lyrics
-./install.sh
+pip install .
 ```
-
----
-
-## Manual Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/samuz/ethereal-lyrics.git
-cd ethereal-lyrics
-```
-
-### 2. Create virtual environment
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -e .
-```
-
-### 4. Run
-
-```bash
-python -m src.main
-```
-
-> **Note:** Spotify API credentials are optional. The app uses local D-Bus detection by default (no login needed).
 
 ---
 
@@ -88,10 +61,9 @@ python -m src.main
 ```bash
 # Run the application
 ethereal-lyrics
-
-# Or run directly
-python -m src.main
 ```
+
+That's it! The binary includes everything you need.
 
 ---
 
@@ -127,6 +99,9 @@ LYRIC_OFFSET_MS=1000
 
 ## Dependencies
 
+**Binary (recommended):** None - everything is included
+
+**From source:**
 - Python 3.10+
 - Rich (terminal UI)
 - httpx (HTTP client)
