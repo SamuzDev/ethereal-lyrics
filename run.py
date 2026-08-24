@@ -65,8 +65,8 @@ if "-c" in args or "--check-update" in args:
         if latest and _parse_version(current) < _parse_version(latest):
             print(f"Update available: v{current} \u2192 v{latest}")
             print(f"Run: ethereal-lyrics --update")
-        else:
-            print(f"You're up to date (v{current})")
+            sys.exit(1)
+        # Silent if up to date
     except Exception as e:
         print(f"Check failed: {e}", file=sys.stderr)
     sys.exit(0)
