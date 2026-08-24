@@ -49,22 +49,38 @@ def render_big(text: str, max_width: int) -> list[str]:
 
 
 def _split_words(text: str) -> list[str]:
-    """Split text into words, joining punctuation with preceding word.
+    """Split text into words, joining punctuation with adjacent words.
 
-    This prevents punctuation marks like ? ! . , from appearing
-    as separate words at the start of the display.
+    Prevents punctuation marks from appearing as separate words
+    at the start or end of the display.
     """
     raw = text.split()
     if not raw:
         return []
 
     punctuation = set("?!.,;:'\")\u00bf\u00a1\u2026")
-    result: list[str] = []
+
+    # Pass 1: join trailing/inline punctuation with previous word
+    merged: list[str] = []
     for word in raw:
-        if result and word[0] in punctuation:
-            result[-1] = result[-1] + word
+        if merged and word[0] in punctuation:
+            merged[-1] = merged[-1] + word
+        else:
+            merged.append(word)
+
+    # Pass 2: join leading punctuation with next word
+    result: list[str] = []
+    i = 0
+    while i < len(merged):
+        word = merged[i]
+        # If word is only punctuation and there's a next word, join them
+        if all(c in punctuation for c in word) and i + 1 < len(merged):
+            result.append(word + merged[i + 1])
+            i += 2
         else:
             result.append(word)
+            i += 1
+
     return result
 
 
