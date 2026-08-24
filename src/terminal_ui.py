@@ -123,7 +123,7 @@ class TerminalUI:
             self._live = Live(
                 self._build_frame(track, lyrics),
                 console=self.console,
-                refresh_per_second=10,
+                refresh_per_second=20,
             )
             self._live.start()
         else:
@@ -244,10 +244,7 @@ class TerminalUI:
                         elapsed = adjusted - current_line.start_ms
                         ratio = max(0.0, min(1.0, elapsed / duration))
                         interpolated_idx = min(int(ratio * len(words)), len(words) - 1)
-                        now = time.monotonic()
-                        if now - self._word_change_time >= word_duration_s * 0.4:
-                            self._word_index = interpolated_idx
-                            self._word_change_time = now
+                        self._word_index = interpolated_idx
                     else:
                         now = time.monotonic()
                         if now - self._word_change_time >= word_duration_s:

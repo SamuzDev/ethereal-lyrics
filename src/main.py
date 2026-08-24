@@ -54,15 +54,13 @@ class EtherealLyrics:
                     redirect_uri=self.settings.spotify_redirect_uri,
                 )
                 if self._local_client.is_spotify_running():
-                    self.ui.print_info("Using local D-Bus detection (no login needed)")
                     self._use_local = True
                 else:
-                    self.ui.print_info("Local detection unavailable, using Spotify API")
                     self._use_local = False
             except Exception:
                 self._use_local = True
         else:
-            self.ui.print_info("No Spotify credentials — using local D-Bus detection")
+            self._use_local = True
 
         self._current_track_id: str | None = None
         self._current_lyrics: Lyrics | None = None
@@ -88,6 +86,10 @@ class EtherealLyrics:
 
     def run(self):
         self.ui.console.clear()
+        if self._spotify_client and not self._use_local:
+            self.ui.print_info("Using Spotify API")
+        else:
+            self.ui.print_info("No Spotify credentials — using local D-Bus detection")
         self.ui.print_info("Detecting Spotify...")
         time.sleep(1)
 
@@ -154,7 +156,7 @@ class EtherealLyrics:
                     self.lyrics_fetcher.update_timing(track_id, progress_ms)
 
                 self.ui.render(render_track, self._current_lyrics)
-                time.sleep(0.5)
+                time.sleep(0.05)
 
             except KeyboardInterrupt:
                 self._running = False
