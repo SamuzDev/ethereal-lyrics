@@ -10,7 +10,7 @@
 
 ## Preview
 
-https://private-user-images.githubusercontent.com/108047432/640066507-b70bee4d-2869-4f20-bd54-cc32f3370c8b.mp4?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3ODc1MzYzOTcsIm5iZiI6MTc4NzUzNjA5NywicGF0aCI6Ii8xMDgwNDc0MzIvNjQwMDY2NTA3LWI3MGJlZTRkLTI4NjktNGYyMC1iZDU0LWNjMzJmMzM3MGM4Yi5tcDQ_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjYwODI0JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI2MDgyNFQwMTQ4MTdaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT1iMTdmNmY3MDliYWZjYmEyYTIwZDRhMmY1MGYxYzM5MThhYjc2Yzk0ZmM4NmI5ZDE0ZWY1MDE1ZGMyNjg0MGUwJlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCZyZXNwb25zZS1jb250ZW50LXR5cGU9dmlkZW8lMkZtcDQifQ.ySRP_2rQaYF8w9Hl90aitBtrnUzj63X2YyQZmW_WrA4
+![Preview](assets/preview.gif)
 
 ---
 
@@ -30,7 +30,7 @@ https://private-user-images.githubusercontent.com/108047432/640066507-b70bee4d-2
 ### One-liner with curl
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash
 ```
 
 ### Or clone and install
