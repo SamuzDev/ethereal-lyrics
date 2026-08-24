@@ -1,6 +1,7 @@
 """Ethereal Lyrics - Display Spotify lyrics in your terminal."""
 
 import sys
+import os
 import time
 import signal
 from dataclasses import dataclass
@@ -63,6 +64,7 @@ class EtherealLyrics:
             self._use_local = True
 
         self._current_track_id: str | None = None
+        self._current_track_name: str = ""
         self._current_lyrics: Lyrics | None = None
         self._last_progress_ms: int = 0
         self._running = True
@@ -76,11 +78,17 @@ class EtherealLyrics:
 
     def _check_keypress(self) -> str | None:
         """Check for keypress without blocking."""
-        import sys
-        if sys.platform == "linux":
+        if not sys.stdin.isatty():
+            return None
+        fd = sys.stdin.fileno()
+        try:
             import select
-            if select.select([sys.stdin], [], [], 0)[0]:
-                return sys.stdin.read(1)
+            r, _, _ = select.select([fd], [], [], 0)
+            if r:
+                data = os.read(fd, 1)
+                return data.decode('utf-8', errors='ignore') if data else None
+        except (OSError, IOError, ValueError):
+            pass
         return None
 
     def _fetch_lyrics_for_track(self, name: str, artist: str, album: str, duration_ms: int, track_id: str | None = None) -> Lyrics | None:
@@ -140,7 +148,7 @@ class EtherealLyrics:
 
                 if not name:
                     self.ui.render(None, None)
-                    time.sleep(3)
+                    time.sleep(0.3)
                     continue
 
                 # Use name+artist as fallback track_id if D-Bus doesn't provide one
@@ -157,22 +165,36 @@ class EtherealLyrics:
                     track_id=track_id,
                 )
 
-                if track_id != self._current_track_id:
+                # Detect track change by track_id OR by name change
+                track_changed = (
+                    track_id != self._current_track_id
+                    or name != self._current_track_name
+                )
+
+                if track_changed:
                     self._current_track_id = track_id
+                    self._current_track_name = name
                     self._last_progress_ms = progress_ms
                     self.ui._prev_lyric_idx = -1
                     self.ui._word_index = 0
                     self.lyrics_fetcher.reset_timing(track_id)
+                    # Reset interpolation state for new track
+                    if self._use_local and self._local_client:
+                        self._local_client.reset_interpolation()
                     self._current_lyrics = self._fetch_lyrics_for_track(
                         name, artist, album, duration_ms, track_id
                     )
                 elif track_id and progress_ms < self._last_progress_ms - 1000:
                     # Position jumped backward — new song or restart
                     self._current_track_id = track_id
+                    self._current_track_name = name
                     self._last_progress_ms = progress_ms
                     self.ui._prev_lyric_idx = -1
                     self.ui._word_index = 0
                     self.lyrics_fetcher.reset_timing(track_id)
+                    # Reset interpolation state for new track
+                    if self._use_local and self._local_client:
+                        self._local_client.reset_interpolation()
                     self._current_lyrics = self._fetch_lyrics_for_track(
                         name, artist, album, duration_ms, track_id
                     )

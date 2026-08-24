@@ -39,6 +39,14 @@ class LocalSpotifyClient:
         self._last_read_time: float = 0.0
         self._poll_count: int = 0
         self._anchored: bool = False
+        self._last_track_id: str | None = None
+
+    def reset_interpolation(self) -> None:
+        """Reset interpolation state when track changes."""
+        self._last_position = 0
+        self._last_read_time = 0.0
+        self._poll_count = 0
+        self._anchored = False
 
     def _ensure_connected(self) -> bool:
         if self._connected:
