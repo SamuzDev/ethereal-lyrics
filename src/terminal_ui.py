@@ -159,9 +159,10 @@ class TerminalUI:
             adjusted = progress_ms - offset
             idx = -1
             for i, line in enumerate(lines):
-                if line.start_ms is not None and line.start_ms <= adjusted:
+                # Add 200ms buffer: only show line when clearly past its start
+                if line.start_ms is not None and line.start_ms <= adjusted - 200:
                     idx = i
-                elif line.start_ms is not None and line.start_ms > adjusted:
+                elif line.start_ms is not None and line.start_ms > adjusted - 200:
                     break
             return idx
         else:
@@ -197,10 +198,8 @@ class TerminalUI:
         idx = self._get_current_lyric_index(lines, progress_ms, is_synced, lyrics)
 
         if idx < 0 or idx >= len(lines):
-            pad = (height - 7) // 2
-            text.append("\n" * pad, style=self._color)
-            text.append(" " * ((width - 3) // 2) + "...", style=self._color)
-            text.append("\n" * (height - pad - 1), style=self._color)
+            # No active lyric - show empty space
+            text.append("\n" * height, style=self._color)
             return text
 
         line_text = lines[idx].text
@@ -241,7 +240,8 @@ class TerminalUI:
                 if current_line.start_ms is not None and current_line.end_ms is not None:
                     duration = current_line.end_ms - current_line.start_ms
                     if duration > 0:
-                        elapsed = adjusted - current_line.start_ms
+                        # Add 100ms buffer before first word appears
+                        elapsed = adjusted - current_line.start_ms - 100
                         ratio = max(0.0, min(1.0, elapsed / duration))
                         interpolated_idx = min(int(ratio * len(words)), len(words) - 1)
                         self._word_index = interpolated_idx
