@@ -103,12 +103,6 @@ class EtherealLyrics:
 
     def run(self):
         self.ui.console.clear()
-        if self._spotify_client and not self._use_local:
-            self.ui.print_info("Using Spotify API")
-        else:
-            self.ui.print_info("No Spotify credentials — using local D-Bus detection")
-        self.ui.print_info("Detecting Spotify...")
-        time.sleep(1)
 
         while self._running:
             try:
