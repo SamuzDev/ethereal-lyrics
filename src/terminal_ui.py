@@ -149,7 +149,7 @@ def _split_words(text: str) -> list[str]:
 
 
 class TerminalUI:
-    def __init__(self, offset_ms: int = 0, color: str = "bold white") -> None:
+    def __init__(self, offset_ms: int = 0, color: str = "bold white", word_count: int = 1) -> None:
         self.console = Console()
         self._live: Live | None = None
         self._prev_lyric_idx: int = -1
@@ -157,6 +157,7 @@ class TerminalUI:
         self._word_change_time: float = time.monotonic()
         self._offset_ms = offset_ms
         self._color = color
+        self._word_count = max(1, word_count)
 
     def render(
         self,
@@ -284,27 +285,30 @@ class TerminalUI:
                         elapsed = adjusted - current_line.start_ms - 100
                         ratio = max(0.0, min(1.0, elapsed / duration))
                         interpolated_idx = min(int(ratio * len(words)), len(words) - 1)
-                        self._word_index = interpolated_idx
+                        self._word_index = (interpolated_idx // self._word_count) * self._word_count
                     else:
                         now = time.monotonic()
                         if now - self._word_change_time >= word_duration_s:
-                            self._word_index += 1
+                            self._word_index += self._word_count
                             self._word_change_time = now
                 else:
                     now = time.monotonic()
                     if now - self._word_change_time >= word_duration_s:
-                        self._word_index += 1
+                        self._word_index += self._word_count
                         self._word_change_time = now
             else:
                 now = time.monotonic()
                 if now - self._word_change_time >= word_duration_s:
-                    self._word_index += 1
+                    self._word_index += self._word_count
                     self._word_change_time = now
 
             if self._word_index >= len(words):
                 self._word_index = 0
 
-            big_lines = render_big(words[self._word_index], width - 4)
+            # Render N words at a time
+            end_idx = min(self._word_index + self._word_count, len(words))
+            display_text = " ".join(words[self._word_index:end_idx])
+            big_lines = render_big(display_text, width - 4)
 
         total_height = len(big_lines)
         pad_top = max(0, (height - total_height) // 2)

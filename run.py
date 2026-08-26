@@ -16,6 +16,7 @@ Options:
   -c, --check-update  Check for available updates
   -v, --version       Show current version
   -C, --color COLOR   Override lyric color (e.g. cyan, magenta, 196)
+  -W, --words N       Number of words to show at once (default: 1)
   -h, --help          Show this help message
 
 Environment Variables:
@@ -139,14 +140,22 @@ for i, arg in enumerate(args):
             os.environ["LYRIC_COLOR"] = color_override
         break
 
+# Handle --words / -W
+for i, arg in enumerate(args):
+    if arg in ("-W", "--words"):
+        if i + 1 < len(args) and args[i + 1].isdigit():
+            word_count = max(1, int(args[i + 1]))
+            os.environ["LYRIC_WORDS"] = str(word_count)
+        break
+
 # Check for unknown arguments
 valid_flags = {"-l", "--lyrics", "-u", "--update", "-c", "--check-update",
-               "-v", "--version", "-C", "--color", "-h", "--help"}
+               "-v", "--version", "-C", "--color", "-W", "--words", "-h", "--help"}
 
-# Build set of args that are values for flags (e.g., value after -C/--color)
+# Build set of args that are values for flags (e.g., value after -C/--color, -W/--words)
 skip_args = set()
 for i, arg in enumerate(args):
-    if arg in ("-C", "--color") and i + 1 < len(args):
+    if arg in ("-C", "--color", "-W", "--words") and i + 1 < len(args):
         skip_args.add(args[i + 1])
 
 for arg in args:

@@ -41,6 +41,7 @@ class EtherealLyrics:
         self.ui = TerminalUI(
             offset_ms=self.settings.lyric_offset_ms,
             color=self.settings.lyric_color,
+            word_count=self.settings.lyric_words,
         )
 
         self._local_client = LocalSpotifyClient()
