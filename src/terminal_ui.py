@@ -229,7 +229,9 @@ class TerminalUI:
         if lyrics is None or not lyrics:
             pad = (height - 7) // 2
             text.append("\n" * pad, style=self._color)
-            text.append(" " * ((width - 3) // 2) + "...", style=self._color)
+            dot_pad_left = (width - 3) // 2
+            dot_pad_right = max(0, width - dot_pad_left - 3)
+            text.append(" " * dot_pad_left + "..." + " " * dot_pad_right, style=self._color)
             text.append("\n" * (height - pad - 1), style=self._color)
             return text
 
@@ -317,7 +319,8 @@ class TerminalUI:
         for line in big_lines:
             line_width = len(line)
             pad_left = max(0, (width - line_width) // 2)
-            text.append(" " * pad_left + line + "\n", style=self._color)
+            pad_right = max(0, width - pad_left - line_width)
+            text.append(" " * pad_left + line + " " * pad_right + "\n", style=self._color)
 
         remaining = height - pad_top - total_height - 1
         if remaining > 0:
