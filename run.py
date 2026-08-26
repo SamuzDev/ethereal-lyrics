@@ -142,15 +142,17 @@ for i, arg in enumerate(args):
 # Check for unknown arguments
 valid_flags = {"-l", "--lyrics", "-u", "--update", "-c", "--check-update",
                "-v", "--version", "-C", "--color", "-h", "--help"}
+
+# Build set of args that are values for flags (e.g., value after -C/--color)
+skip_args = set()
+for i, arg in enumerate(args):
+    if arg in ("-C", "--color") and i + 1 < len(args):
+        skip_args.add(args[i + 1])
+
 for arg in args:
-    if arg.startswith("-") and arg not in valid_flags:
-        # Check if it's a value for -C/--color (skip those)
-        if color_arg_found and arg == args[args.index("-C") + 1] if "-C" in args else False:
-            continue
-        if color_arg_found and arg == args[args.index("--color") + 1] if "--color" in args else False:
-            continue
-        print(f"Unknown option: {arg}")
-        print("Run 'ethereal-lyrics -h' for usage information.")
+    if arg.startswith("-") and arg not in valid_flags and arg not in skip_args:
+        print(f"\033[0;31m\u2717\033[0m Unknown option: \033[1;33m{arg}\033[0m")
+        print("  Run 'ethereal-lyrics -h' for usage information.")
         sys.exit(1)
 
 # Silent update check on startup
