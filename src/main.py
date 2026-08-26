@@ -166,7 +166,15 @@ class EtherealLyrics:
                     or name != self._current_track_name
                 )
 
-                if track_changed:
+                # Detect resume: same track but was paused, now playing with no lyrics
+                is_resume = (
+                    not track_changed
+                    and track_id == self._current_track_id
+                    and is_playing
+                    and self._current_lyrics is None
+                )
+
+                if track_changed or is_resume:
                     self._current_track_id = track_id
                     self._current_track_name = name
                     self._last_progress_ms = progress_ms

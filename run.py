@@ -16,7 +16,7 @@ Options:
   -c, --check-update  Check for available updates
   -v, --version       Show current version
   -C, --color COLOR   Override lyric color (e.g. cyan, magenta, 196)
-  -W, --words N       Number of words to show at once (default: 1)
+  -W, --words N       Words per screen (0=auto, default: 0)
   -h, --help          Show this help message
 
 Environment Variables:

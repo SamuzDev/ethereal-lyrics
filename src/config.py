@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     lyric_color: str = Field(default="bold white", env="LYRIC_COLOR")
 
-    lyric_words: int = Field(default=1, env="LYRIC_WORDS")
+    lyric_words: int = Field(default=0, env="LYRIC_WORDS")
 
     class Config:
         env_file = ".env"

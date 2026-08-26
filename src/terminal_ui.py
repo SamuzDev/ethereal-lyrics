@@ -148,8 +148,14 @@ def _split_words(text: str) -> list[str]:
     return result
 
 
+def _count_real_words(words: list[str]) -> int:
+    """Count words that contain at least one letter (exclude pure punctuation)."""
+    import re
+    return sum(1 for w in words if re.search(r'[a-zA-Záéíóúüñ]', w))
+
+
 class TerminalUI:
-    def __init__(self, offset_ms: int = 0, color: str = "bold white", word_count: int = 1) -> None:
+    def __init__(self, offset_ms: int = 0, color: str = "bold white", word_count: int = 0) -> None:
         self.console = Console()
         self._live: Live | None = None
         self._prev_lyric_idx: int = -1
@@ -157,7 +163,7 @@ class TerminalUI:
         self._word_change_time: float = time.monotonic()
         self._offset_ms = offset_ms
         self._color = color
-        self._word_count = max(1, word_count)
+        self._word_count = word_count  # 0 = auto mode
 
     def render(
         self,
@@ -261,6 +267,9 @@ class TerminalUI:
             # Unsynced or single word: show full line at once
             big_lines = render_big(line_text, width - 4)
         else:
+            real_count = _count_real_words(words)
+            effective_count = self._word_count if self._word_count > 0 else min(3, real_count)
+
             if is_synced and idx + 1 < len(lines) and lines[idx + 1].start_ms is not None:
                 line_duration = lines[idx + 1].start_ms - lines[idx].start_ms
             elif is_synced and lines[idx].end_ms is not None:
@@ -268,7 +277,7 @@ class TerminalUI:
             else:
                 line_duration = len(words) * 800
 
-            word_duration_ms = max(300, line_duration // len(words))
+            word_duration_ms = max(300, line_duration // max(1, real_count))
             word_duration_s = word_duration_ms / 1000.0
 
             if is_synced:
@@ -285,28 +294,39 @@ class TerminalUI:
                         elapsed = adjusted - current_line.start_ms - 100
                         ratio = max(0.0, min(1.0, elapsed / duration))
                         interpolated_idx = min(int(ratio * len(words)), len(words) - 1)
-                        self._word_index = (interpolated_idx // self._word_count) * self._word_count
+                        self._word_index = (interpolated_idx // max(1, effective_count)) * effective_count
                     else:
                         now = time.monotonic()
                         if now - self._word_change_time >= word_duration_s:
-                            self._word_index += self._word_count
+                            self._word_index += max(1, effective_count)
                             self._word_change_time = now
                 else:
                     now = time.monotonic()
                     if now - self._word_change_time >= word_duration_s:
-                        self._word_index += self._word_count
+                        self._word_index += max(1, effective_count)
                         self._word_change_time = now
             else:
                 now = time.monotonic()
                 if now - self._word_change_time >= word_duration_s:
-                    self._word_index += self._word_count
+                    self._word_index += max(1, effective_count)
                     self._word_change_time = now
 
             if self._word_index >= len(words):
                 self._word_index = 0
 
-            # Render N words at a time
-            end_idx = min(self._word_index + self._word_count, len(words))
+            # Auto-resize: find largest N that fits the screen
+            if self._word_count == 0:
+                best_n = 1
+                for n in range(min(6, len(words)), 0, -1):
+                    end = min(self._word_index + n, len(words))
+                    candidate = " ".join(words[self._word_index:end])
+                    test_lines = render_big(candidate, width - 4)
+                    if test_lines and len(test_lines[0]) <= width - 4:
+                        best_n = n
+                        break
+                effective_count = best_n
+
+            end_idx = min(self._word_index + effective_count, len(words))
             display_text = " ".join(words[self._word_index:end_idx])
             big_lines = render_big(display_text, width - 4)
 
