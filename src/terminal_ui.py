@@ -58,8 +58,6 @@ def render_big(text: str, max_width: int) -> list[str]:
         text = text.replace(typo, plain)
 
     normalized = text.upper()
-    for ch in "\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00fc":
-        normalized = normalized.replace(ch.upper(), ch)
 
     glyphs: list[list[str]] = []
     for ch in normalized:
