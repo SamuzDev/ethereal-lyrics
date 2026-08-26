@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import signal
+import atexit
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
@@ -75,12 +76,10 @@ class EtherealLyrics:
 
     def _signal_handler(self, signum: int, frame) -> None:
         self._running = False
-        self.ui.console.clear()
+        self.ui.stop()
 
     def _check_keypress(self) -> str | None:
         """Check for keypress without blocking."""
-        if not sys.stdin.isatty():
-            return None
         fd = sys.stdin.fileno()
         try:
             import select
@@ -218,6 +217,7 @@ class EtherealLyrics:
                 self._running = False
                 break
             except Exception as e:
+                self.ui.stop()
                 self.ui.print_error(str(e))
                 time.sleep(2)
 
@@ -287,6 +287,11 @@ def show_lyrics_debug():
 
 def main():
     app = EtherealLyrics()
+
+    def cleanup():
+        app.ui.stop()
+
+    atexit.register(cleanup)
     app.run()
 
 

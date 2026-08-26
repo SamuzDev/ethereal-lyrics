@@ -22,13 +22,13 @@ def _make_text_glyph(ch: str) -> list[str]:
     """
     S = "\u2588"
     display = ch
-    # Create a large centered representation
+    # Create a large centered representation (6 chars wide)
     glyph = [
         f" {S * 4} ",
         f"{S}    {S}",
-        f"{S} {display} {S}",
-        f"{S} {display} {S}",
-        f"{S} {display} {S}",
+        f"{S} {display} {S}".ljust(6)[:6],
+        f"{S} {display} {S}".ljust(6)[:6],
+        f"{S} {display} {S}".ljust(6)[:6],
         f"{S}    {S}",
         f" {S * 4} ",
     ]
@@ -176,7 +176,6 @@ class TerminalUI:
                 self._build_frame(track, lyrics),
                 console=self.console,
                 refresh_per_second=20,
-                screen=True,
             )
             self._live.start()
         else:
@@ -186,6 +185,8 @@ class TerminalUI:
         if self._live is not None:
             self._live.stop()
             self._live = None
+        # Reset terminal state
+        self.console.show_cursor(False)
         self.console.clear()
 
     def print_error(self, msg: str) -> None:
@@ -314,14 +315,19 @@ class TerminalUI:
             if self._word_index >= len(words):
                 self._word_index = 0
 
-            # Auto-resize: find largest N that fits the screen
+            # Auto-resize: find largest N of complete words that fits the screen
             if self._word_count == 0:
                 best_n = 1
                 for n in range(min(6, len(words)), 0, -1):
                     end = min(self._word_index + n, len(words))
                     candidate = " ".join(words[self._word_index:end])
-                    test_lines = render_big(candidate, width - 4)
-                    if test_lines and len(test_lines[0]) <= width - 4:
+                    # Calculate raw width without truncation
+                    typo_candidate = candidate
+                    for typo, plain in _TYPOGRAPHIC_MAP.items():
+                        typo_candidate = typo_candidate.replace(typo, plain)
+                    glyph_count = len(typo_candidate.upper())
+                    raw_w = glyph_count * 6 + max(0, glyph_count - 1)
+                    if raw_w <= width - 4:
                         best_n = n
                         break
                 effective_count = best_n
