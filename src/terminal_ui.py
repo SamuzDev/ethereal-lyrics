@@ -3,7 +3,6 @@ centered on screen, using block character art."""
 
 from __future__ import annotations
 
-import os
 import time
 from typing import Any
 
@@ -39,15 +38,16 @@ def _make_text_glyph(ch: str) -> list[str]:
 _TYPOGRAPHIC_MAP = {
     "\u2018": "'",  # left single quote → straight
     "\u2019": "'",  # right single quote → straight
-    "\u201c": '"',  # left double quote → straight
-    "\u201d": '"',  # right double quote → straight
+    "\u201c": "",  # left double quote → remove
+    "\u201d": "",  # right double quote → remove
+    "\u0022": "",  # straight double quote → remove
     "\u2013": "-",  # en dash → hyphen
     "\u2014": "-",  # em dash → hyphen
     "\u2026": "...",  # ellipsis → three dots
     "\u00b7": ".",  # middle dot → period
     "\u2022": "-",  # bullet → hyphen
-    "\u00ab": '"',  # left guillemet → straight
-    "\u00bb": '"',  # right guillemet → straight
+    "\u00ab": "",  # left guillemet → remove
+    "\u00bb": "",  # right guillemet → remove
     "\u2039": "'",  # single left guillemet → straight
     "\u203a": "'",  # single right guillemet → straight
 }
@@ -63,6 +63,8 @@ def render_big(text: str, max_width: int) -> list[str]:
     for ch in normalized:
         if ch in FONT:
             glyphs.append(FONT[ch])
+        elif ch.lower() in FONT:
+            glyphs.append(FONT[ch.lower()])
         else:
             glyphs.append(_make_text_glyph(ch))
 
@@ -160,6 +162,7 @@ class TerminalUI:
         lyrics: Any,
     ) -> None:
         if self._live is None:
+            self.console.clear()
             self._live = Live(
                 self._build_frame(track, lyrics),
                 console=self.console,
@@ -217,20 +220,11 @@ class TerminalUI:
     ) -> Text:
         text = Text()
 
-        try:
-            term_size = os.get_terminal_size()
-            width = term_size.columns
-            height = term_size.lines
-        except (ValueError, OSError):
-            width, height = 80, 24
+        width, height = self.console.size
 
         if lyrics is None or not lyrics:
-            pad = (height - 7) // 2
-            text.append("\n" * pad, style=self._color)
-            dot_pad_left = (width - 3) // 2
-            dot_pad_right = max(0, width - dot_pad_left - 3)
-            text.append(" " * dot_pad_left + "..." + " " * dot_pad_right, style=self._color)
-            text.append("\n" * (height - pad - 1), style=self._color)
+            for _ in range(height):
+                text.append(" " * width + "\n", style=self._color)
             return text
 
         lines = lyrics.lines
@@ -240,8 +234,8 @@ class TerminalUI:
         idx = self._get_current_lyric_index(lines, progress_ms, is_synced, lyrics)
 
         if idx < 0 or idx >= len(lines):
-            # No active lyric - show empty space
-            text.append("\n" * height, style=self._color)
+            for _ in range(height):
+                text.append(" " * width + "\n", style=self._color)
             return text
 
         line_text = lines[idx].text
@@ -312,7 +306,8 @@ class TerminalUI:
         total_height = len(big_lines)
         pad_top = max(0, (height - total_height) // 2)
 
-        text.append("\n" * pad_top, style=self._color)
+        for _ in range(pad_top):
+            text.append(" " * width + "\n", style=self._color)
 
         for line in big_lines:
             line_width = len(line)
@@ -320,8 +315,8 @@ class TerminalUI:
             pad_right = max(0, width - pad_left - line_width)
             text.append(" " * pad_left + line + " " * pad_right + "\n", style=self._color)
 
-        remaining = height - pad_top - total_height - 1
-        if remaining > 0:
-            text.append("\n" * remaining, style=self._color)
+        remaining = max(0, height - pad_top - total_height)
+        for _ in range(remaining):
+            text.append(" " * width + "\n", style=self._color)
 
         return text
