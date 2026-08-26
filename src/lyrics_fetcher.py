@@ -2,13 +2,16 @@
 
 Providers:
 - LRCLib: Free, synced lyrics, no auth required
-- Musixmatch: High quality synced lyrics, requires API key (free tier: 2000/day)
+- Musixmatch: High quality synced lyrics (word-level via desktop API, no key needed)
 """
 
 import httpx
+import json
+import re
 import time
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
+from pathlib import Path
 from abc import ABC, abstractmethod
 
 
@@ -446,17 +449,25 @@ class LRCLibProvider(LyricsProvider):
 
 
 class MusixmatchProvider(LyricsProvider):
-    """Musixmatch provider - high quality synced lyrics.
+    """Musixmatch provider - high quality synced lyrics via desktop API.
 
-    Free tier: 2000 requests/day, but only 30% of lyrics.
-    For full lyrics, you need a commercial license.
+    Uses the same unauthenticated desktop API as canticle/sptlrx/musixmatch-freeAPI.
+    Automatically obtains and caches tokens. No API key required.
     """
 
-    BASE_URL = "https://api.musixmatch.com/ws/1.1"
+    BASE_URL = "https://apic-desktop.musixmatch.com/ws/1.1/"
+    APP_ID = "web-desktop-app-v1.0"
+    USER_AGENT = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    )
 
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.client = httpx.Client(timeout=10.0, verify=True)
+    def __init__(self):
+        self.client = httpx.Client(timeout=15.0, follow_redirects=True)
+        self._token: str | None = None
+        self._token_at: float = 0.0
+        self._token_path = Path.home() / ".cache" / "ethereal-lyrics" / "musixmatch_token.json"
+        self._load_cached_token()
 
     @property
     def name(self) -> str:
@@ -464,76 +475,304 @@ class MusixmatchProvider(LyricsProvider):
 
     @property
     def is_available(self) -> bool:
-        return bool(self.api_key)
+        return True
 
-    def _search_track(
-        self, track_name: str, artist_name: str
-    ) -> str | None:
-        """Search for a track and return commontrack_id."""
+    def _request(self, endpoint: str, params: dict) -> dict | None:
+        """Make an authenticated request to the Musixmatch desktop API."""
+        query = {"app_id": self.APP_ID, "format": "json", **params}
+        headers = {
+            "User-Agent": self.USER_AGENT,
+            "Cookie": "x-mxm-token-guid=",
+            "x-mxm-user-token": self._token or "",
+        }
         try:
             response = self.client.get(
-                f"{self.BASE_URL}/track.search",
-                params={
-                    "q_track": track_name,
-                    "q_artist": artist_name,
-                    "apikey": self.api_key,
-                    "page_size": 5,
-                    "s_track_rating": "desc",
-                    "f_has_lyrics": "1",
-                },
+                f"{self.BASE_URL}{endpoint}",
+                headers=headers,
+                params=query,
             )
-
             if response.status_code == 200:
-                data = response.json()
-                tracks = data.get("message", {}).get("body", {}).get("track_list", [])
-                for track in tracks:
-                    track_info = track.get("track", {})
-                    if track_info.get("has_lyrics") == 1:
-                        return track_info.get("commontrack_id")
-        except httpx.HTTPError:
+                text = response.text
+                if text.lstrip().startswith("<"):
+                    return None
+                return json.loads(text)
+        except (httpx.HTTPError, json.JSONDecodeError):
             pass
-
         return None
 
-    def _get_synced_lyrics(self, commontrack_id: str) -> str | None:
-        """Get synced lyrics for a commontrack_id."""
+    def _load_cached_token(self) -> None:
+        """Load cached token from disk (valid 6 hours)."""
         try:
-            response = self.client.get(
-                f"{self.BASE_URL}/track.subtitle.get",
-                params={
-                    "commontrack_id": commontrack_id,
-                    "apikey": self.api_key,
-                    "subtitle_format": "lrc",
-                },
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                subtitle = data.get("message", {}).get("body", {}).get("subtitle", {})
-                return subtitle.get("subtitle_body")
-        except httpx.HTTPError:
+            if self._token_path.exists():
+                data = json.loads(self._token_path.read_text())
+                if data.get("v") and data.get("t", 0) > 0:
+                    self._token = data["v"]
+                    self._token_at = data["t"]
+        except (json.JSONDecodeError, OSError):
             pass
 
+    def _save_token(self, token: str) -> None:
+        """Persist token to disk (valid 6 hours)."""
+        self._token = token
+        self._token_at = time.time()
+        try:
+            self._token_path.parent.mkdir(parents=True, exist_ok=True)
+            self._token_path.write_text(json.dumps({"v": token, "t": self._token_at}))
+        except OSError:
+            pass
+
+    def _get_token(self, force: bool = False) -> str | None:
+        """Obtain a user token from the desktop API.
+
+        Tokens are cached for 6 hours. On rate limit (captcha/401),
+        retries with exponential backoff.
+        """
+        self._load_cached_token()
+        if not force and self._token and time.time() - self._token_at < 21600:
+            return self._token
+
+        for delay in (0, 20, 45, 90):
+            if delay:
+                time.sleep(delay)
+            try:
+                ts = str(int(time.time() * 1000))
+                data = self._request("token.get", {"t": ts})
+                body = (data or {}).get("message", {}).get("body", {})
+                if isinstance(body, dict) and "user_token" in body:
+                    tok = body["user_token"]
+                    if tok and not tok.startswith("UpgradeOnly"):
+                        self._save_token(tok)
+                        return tok
+            except Exception:
+                continue
+
+        return self._token
+
+    def _parse_richsync(self, richsync_body: str) -> list[LyricLine]:
+        """Parse word-level richsync data into LyricLine objects.
+
+        Richsync format: list of {ts, te, l: [{c, o}], x}
+        - ts: line start time (seconds)
+        - te: line end time (seconds)
+        - l: list of {c: char, o: offset_from_line_start}
+        - x: full line text
+        """
+        try:
+            entries = json.loads(richsync_body)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+        lines = []
+        for entry in entries:
+            ts = entry.get("ts", 0)
+            te = entry.get("te", ts)
+            words = entry.get("l", [])
+            line_text = entry.get("x", "").strip()
+            if not line_text or not words:
+                continue
+
+            start_ms = int(ts * 1000)
+            end_ms = int(te * 1000)
+
+            # Build word list and positions from character-level data
+            word_list: list[str] = []
+            word_positions: list[tuple[int, int]] = []
+
+            current_word = ""
+            current_start_char = 0
+            for i, item in enumerate(words):
+                c = item.get("c", "")
+                if c == " ":
+                    if current_word:
+                        word_list.append(current_word)
+                        word_positions.append((current_start_char, current_start_char + len(current_word)))
+                        current_word = ""
+                    if i + 1 < len(words):
+                        current_start_char = i + 1
+                else:
+                    if not current_word:
+                        current_start_char = i
+                    current_word += c
+
+            if current_word:
+                word_list.append(current_word)
+                word_positions.append((current_start_char, current_start_char + len(current_word)))
+
+            line = LyricLine(
+                text=line_text,
+                start_ms=start_ms,
+                end_ms=end_ms,
+            )
+            if word_list:
+                line._words = word_list
+                line._word_positions = word_positions
+            lines.append(line)
+
+        return lines
+
+    def _parse_subtitles(self, subtitle_body: str) -> list[LyricLine]:
+        """Parse line-level subtitle data into LyricLine objects.
+
+        Subtitle format: list of {text, time: {total, minutes, seconds, hundredths}}
+        """
+        try:
+            entries = json.loads(subtitle_body)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+        lines = []
+        for entry in entries:
+            text = entry.get("text", "").strip()
+            time_data = entry.get("time", {})
+            total = time_data.get("total", 0)
+            if not text:
+                continue
+            lines.append(LyricLine(
+                text=text,
+                start_ms=int(total * 1000),
+            ))
+
+        # Set end_ms from next line start
+        for i in range(len(lines)):
+            if i + 1 < len(lines):
+                lines[i].end_ms = lines[i + 1].start_ms
+            else:
+                lines[i].end_ms = lines[i].start_ms + 5000
+
+        return lines
+
+    @staticmethod
+    def _deep_find(obj, key):
+        """Recursively search for a key in nested dicts/lists."""
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k == key:
+                    return v
+                r = MusixmatchProvider._deep_find(v, key)
+                if r is not None:
+                    return r
+        elif isinstance(obj, list):
+            for v in obj:
+                r = MusixmatchProvider._deep_find(v, key)
+                if r is not None:
+                    return r
         return None
 
-    def _get_lyrics(self, commontrack_id: str) -> dict | None:
-        """Get plain lyrics for a commontrack_id."""
-        try:
-            response = self.client.get(
-                f"{self.BASE_URL}/track.lyrics.get",
-                params={
-                    "commontrack_id": commontrack_id,
-                    "apikey": self.api_key,
-                },
-            )
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """Normalize text for fuzzy matching."""
+        import unicodedata
+        s = unicodedata.normalize("NFKD", text or "")
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        s = re.sub(r"\(feat\.[^)]*\)|\[[^\]]*\]", " ", s.lower())
+        s = re.sub(r"[^a-z0-9]+", " ", s)
+        return s.strip()
 
-            if response.status_code == 200:
-                data = response.json()
-                lyrics_list = data.get("message", {}).get("body", {}).get("lyrics", [])
-                if lyrics_list:
-                    return lyrics_list[0] if isinstance(lyrics_list, list) else lyrics_list
-        except httpx.HTTPError:
-            pass
+    def _is_trusted_match(self, track: dict, title: str, artist: str, duration_s: float) -> bool:
+        """Verify that the matched track is trustworthy."""
+        wt, wa = self._normalize(title), self._normalize(artist)
+        gt = self._normalize(track.get("track_name", ""))
+        ga = self._normalize(track.get("artist_name", ""))
+        tl = track.get("track_length") or 0
+        dd = abs(tl - duration_s) if (tl and duration_s) else 9999
+        if dd > 15 and dd != 9999:
+            return False
+        title_ok = bool(gt) and (gt == wt or wt in gt or gt in wt)
+        artist_ok = bool(ga) and (ga == wa or wa in ga or ga in wa)
+        return (title_ok and artist_ok) or (dd <= 4 and (title_ok or artist_ok))
+
+    def _fetch_with_token(self, track_name: str, artist_name: str, album_name: str | None, duration_ms: int | None, token: str) -> Lyrics | None:
+        """Attempt to fetch lyrics with the given token. Returns None on 401 (token refresh needed)."""
+        duration_s = duration_ms / 1000 if duration_ms else 0
+
+        # Step 1: macro.subtitles.get — matches track + returns line-level sync
+        macro_params = {
+            "namespace": "lyrics_richsynched",
+            "subtitle_format": "lrc",
+            "q_track": track_name,
+            "q_artist": artist_name,
+            "q_artists": artist_name,
+            "q_album": album_name or "",
+            "usertoken": token,
+        }
+        if duration_ms:
+            macro_params["q_duration"] = str(int(duration_s))
+
+        macro = self._request("macro.subtitles.get", macro_params)
+        if not macro:
+            return None
+
+        # Check for token exhaustion
+        status = self._deep_find(macro, "status_code")
+        if status == 401:
+            return None
+
+        # Get matched track
+        calls = macro.get("message", {}).get("body", {}).get("macro_calls", {})
+        matcher_track = calls.get("matcher.track.get", {}).get("message", {}).get("body", {}).get("track", {})
+        if not matcher_track or not self._is_trusted_match(matcher_track, track_name, artist_name, duration_s):
+            return None
+
+        ctid = matcher_track.get("commontrack_id")
+        if not ctid or matcher_track.get("instrumental"):
+            return None
+
+        track_name_out = matcher_track.get("track_name", track_name)
+        artist_name_out = matcher_track.get("artist_name", artist_name)
+
+        # Step 2: Try richsync (word-level sync) — only if track has it
+        if matcher_track.get("has_richsync"):
+            time.sleep(1)
+            rich = self._request("track.richsync.get", {
+                "commontrack_id": ctid,
+                "usertoken": token,
+                "namespace": "lyrics_richsynched",
+                "subtitle_format": "lrc",
+            })
+            if rich:
+                rich_status = self._deep_find(rich, "status_code")
+                if rich_status == 401:
+                    return None
+                rs_body = self._deep_find(rich, "richsync_body")
+                if isinstance(rs_body, str) and rs_body:
+                    lines = self._parse_richsync(rs_body)
+                    if lines:
+                        return Lyrics(
+                            track_name=track_name_out,
+                            artist_name=artist_name_out,
+                            album_name=album_name,
+                            lines=lines,
+                            is_synced=True,
+                            provider=self.name,
+                        )
+
+        # Step 3: Fallback to line-level subtitles
+        sub_body = self._deep_find(macro, "subtitle_body")
+        if isinstance(sub_body, str) and "[" in sub_body:
+            lines = self._parse_subtitles(sub_body)
+            if lines:
+                return Lyrics(
+                    track_name=track_name_out,
+                    artist_name=artist_name_out,
+                    album_name=album_name,
+                    lines=lines,
+                    is_synced=True,
+                    provider=self.name,
+                )
+
+        # Step 4: Fallback to plain lyrics
+        plain = self._deep_find(macro, "lyrics_body")
+        if isinstance(plain, str) and plain.strip():
+            lines = parse_plain_lyrics(plain)
+            if lines:
+                return Lyrics(
+                    track_name=track_name_out,
+                    artist_name=artist_name_out,
+                    album_name=album_name,
+                    lines=lines,
+                    is_synced=False,
+                    provider=self.name,
+                )
 
         return None
 
@@ -544,44 +783,20 @@ class MusixmatchProvider(LyricsProvider):
         album_name: str | None = None,
         duration_ms: int | None = None,
     ) -> Lyrics | None:
-        if not self.is_available:
+        token = self._get_token()
+        if not token:
             return None
 
-        # Try synced lyrics first
-        commontrack_id = self._search_track(track_name, artist_name)
-        if not commontrack_id:
+        result = self._fetch_with_token(track_name, artist_name, album_name, duration_ms, token)
+        if result is not None:
+            return result
+
+        # Token may be exhausted — refresh once and retry
+        token = self._get_token(force=True)
+        if not token:
             return None
 
-        synced = self._get_synced_lyrics(commontrack_id)
-        if synced:
-            lines = parse_synced_lyrics(synced)
-            if lines:
-                return Lyrics(
-                    track_name=track_name,
-                    artist_name=artist_name,
-                    album_name=album_name,
-                    lines=lines,
-                    is_synced=True,
-                    provider=self.name,
-                )
-
-        # Fallback to plain lyrics
-        lyrics_data = self._get_lyrics(commontrack_id)
-        if lyrics_data:
-            plain = lyrics_data.get("lyrics_body")
-            if plain:
-                lines = parse_plain_lyrics(plain)
-                if lines:
-                    return Lyrics(
-                        track_name=track_name,
-                        artist_name=artist_name,
-                        album_name=album_name,
-                        lines=lines,
-                        is_synced=False,
-                        provider=self.name,
-                    )
-
-        return None
+        return self._fetch_with_token(track_name, artist_name, album_name, duration_ms, token)
 
 
 class MultiProviderLyricsFetcher:
@@ -601,9 +816,8 @@ class MultiProviderLyricsFetcher:
         # Always add LRCLib (free, no auth)
         self.providers.append(LRCLibProvider())
 
-        # Add Musixmatch if API key provided
-        if musixmatch_api_key:
-            self.providers.append(MusixmatchProvider(musixmatch_api_key))
+        # Always add Musixmatch (desktop API, auto-token, no key needed)
+        self.providers.append(MusixmatchProvider())
 
     def _get_dynamic_offset(self, track_id: str) -> DynamicOffset:
         """Get or create dynamic offset for a track."""
