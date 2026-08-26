@@ -50,6 +50,8 @@ _TYPOGRAPHIC_MAP = {
     "\u00bb": "",  # right guillemet → remove
     "\u2039": "'",  # single left guillemet → straight
     "\u203a": "'",  # single right guillemet → straight
+    "(": "",       # left parenthesis → remove
+    ")": "",       # right parenthesis → remove
 }
 
 
