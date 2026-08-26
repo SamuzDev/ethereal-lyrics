@@ -6,7 +6,7 @@ import urllib.request
 import json
 from pathlib import Path
 
-VERSION = "0.5.5"
+VERSION = "0.5.6"
 REPO = "SamuzDev/ethereal-lyrics"
 GITHUB_API = f"https://api.github.com/repos/{REPO}/releases"
 
