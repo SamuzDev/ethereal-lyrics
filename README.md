@@ -1,6 +1,6 @@
 # ethereal lyrics
 
-**Synced Spotify lyrics in your terminal with a beautiful aesthetic design.**
+**Synced Spotify lyrics in your terminal with block character art.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
@@ -16,27 +16,25 @@ https://private-user-images.githubusercontent.com/108047432/640066507-b70bee4d-2
 
 ## Features
 
-- **Real-time synced lyrics** - Words highlight as the song plays
-- **Beautiful terminal UI** - Block character art with smooth animations
-- **Smart synchronization** - Dynamic offset detection for perfect timing
-- **Multi-provider support** - LRCLib (free), Musixmatch, Genius
-- **Spotify integration** - Auto-detects currently playing track
-- **No login required** - Works with local D-Bus detection
+- **Real-time synced lyrics** — words highlight as the song plays
+- **Block character art** — custom 7x6 pixel font rendered with unicode block elements
+- **Smart synchronization** — dynamic offset detection adapts to each song
+- **Seek detection** — automatically re-syncs when you skip or rewind
+- **LRCLib integration** — free synced lyrics, no API key or login required
+- **Spotify detection** — auto-detects currently playing track via D-Bus (no Spotify API needed)
+- **Lightweight** — single binary, no dependencies
 
 ---
 
-## Quick Install
+## Install
 
-### One-liner with curl (recommended)
+### One-liner (recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash
 ```
 
-This will:
-- Download the precompiled binary for your platform (no Python needed)
-- Install to `~/.local/bin/ethereal-lyrics`
-- Auto-add to PATH if needed
+This downloads the precompiled binary to `~/.local/bin/ethereal-lyrics`.
 
 ### Uninstall
 
@@ -44,9 +42,9 @@ This will:
 curl -fsSL https://raw.githubusercontent.com/SamuzDev/ethereal-lyrics/main/install.sh | bash -s -- uninstall
 ```
 
-### Manual installation from source
+### From source
 
-If you prefer to install from source (requires Python 3.10+):
+Requires Python 3.10+.
 
 ```bash
 git clone https://github.com/SamuzDev/ethereal-lyrics.git
@@ -59,35 +57,47 @@ pip install .
 ## Usage
 
 ```bash
-# Run the application
-ethereal-lyrics
-
-# Check for updates
-ethereal-lyrics --check-update
-
-# Install updates
-ethereal-lyrics --update
+ethereal-lyrics              # Run the lyrics display
+ethereal-lyrics --lyrics     # Show raw lyrics data for current track
+ethereal-lyrics --update     # Update to latest version
+ethereal-lyrics --version    # Show current version
 ```
 
-That's it! The binary includes everything you need.
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `-l`, `--lyrics` | Show raw lyrics data (provider, sync status, timestamps) |
+| `-u`, `--update` | Update to latest version |
+| `-c`, `--check-update` | Check for available updates |
+| `-v`, `--version` | Show current version |
+| `-C`, `--color COLOR` | Override lyric color (e.g. `cyan`, `magenta`, `196`) |
+| `-W`, `--words N` | Words per screen (`0` = auto, default) |
+| `-h`, `--help` | Show help message |
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| `q` | Quit |
 
 ---
 
 ## Configuration
 
-Create a `.env` file in the project root (optional):
+Optional `.env` file in the project root:
 
 ```env
-# Spotify API (optional - for web playback detection)
-# Only needed if you want to use Spotify's web player
+# Lyric timing offset (milliseconds)
+# Positive = lyrics appear later, negative = earlier
+LYRIC_OFFSET_MS=0
+
+# Lyric text color (default: bold white)
+LYRIC_COLOR=bold white
+
+# Spotify API (only needed for web player detection)
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
-
-# Lyric sync offset (milliseconds)
-# Positive = lyrics appear later
-# Negative = lyrics appear earlier
-LYRIC_OFFSET_MS=1000
 ```
 
 > **Note:** The app works without any configuration using local D-Bus detection.
@@ -96,22 +106,24 @@ LYRIC_OFFSET_MS=1000
 
 ## How It Works
 
-1. **Detection** - Detects Spotify playback via D-Bus (no login needed)
-2. **Lyrics** - Fetches synced lyrics from LRCLib (free, no API key)
-3. **Display** - Renders lyrics in real-time with beautiful animations
-4. **Sync** - Dynamic offset detection adapts to each song
+1. **Detection** — detects Spotify playback via D-Bus (no login needed)
+2. **Lyrics** — fetches synced lyrics from [LRCLib](https://lrclib.net/) (free, no API key)
+3. **Display** — renders lyrics as block character art with real-time word highlighting
+4. **Sync** — dynamic offset detection adapts to each song's timing
 
 ---
 
 ## Dependencies
 
-**Binary (recommended):** None - everything is included
+**Binary (recommended):** none — everything is included.
 
 **From source:**
+
 - Python 3.10+
-- Rich (terminal UI)
-- httpx (HTTP client)
-- Spotipy (Spotify API)
+- [Rich](https://github.com/Textualize/rich) — terminal formatting
+- [httpx](https://www.python-httpx.org/) — HTTP client
+- [Spotipy](https:// spotipy.readthedocs.io/) — Spotify API (optional)
+- [dbus-python](https://github.com/altdesktop/python-dbus) — D-Bus detection (Linux)
 
 ---
 
@@ -121,7 +133,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
@@ -129,20 +141,12 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## Acknowledgments
 
-- [LRCLib](https://lrclib.net/) - Free synced lyrics API
-- [Rich](https://github.com/Textualize/rich) - Beautiful terminal formatting
-- [Tokyo Night](https://github.com/enkia/tokyo-night-vscode-theme) - Color palette inspiration
-
----
-
-<p align="center">
-  <img src="https://forthebadge.com/images/badges/made-with-love.svg" alt="Made with love">
-  <br>
-  <sub>Built with passion for music lovers</sub>
-</p>
+- [LRCLib](https://lrclib.net/) — free synced lyrics API
+- [Rich](https://github.com/Textualize/rich) — beautiful terminal formatting
+- [Tokyo Night](https://github.com/enkia/tokyo-night-vscode-theme) — color palette inspiration
