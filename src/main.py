@@ -39,7 +39,6 @@ class EtherealLyrics:
         self.settings = get_settings()
 
         self.lyrics_fetcher = MultiProviderLyricsFetcher(
-            musixmatch_api_key=self.settings.musixmatch_api_key,
             static_offset_ms=self.settings.lyric_offset_ms,
         )
         self.ui = TerminalUI(
@@ -167,9 +166,10 @@ class EtherealLyrics:
         # Cancel any existing fetch
         if self._lyrics_thread and self._lyrics_thread.is_alive():
             return  # Let the existing one finish
-        
+
+        self._pending_fetch = None  # Discard stale results
         self._fetching_lyrics = True
-        
+
         def fetch_and_store():
             try:
                 lyrics = self._fetch_lyrics_for_track(name, artist, album, duration_ms, track_id)
@@ -187,10 +187,9 @@ class EtherealLyrics:
         with self._lyrics_lock:
             if self._pending_fetch is not None:
                 track_id, name, lyrics, track_changed = self._pending_fetch
-                if lyrics is not None or track_changed:
-                    self._current_track_id = track_id
-                    self._current_track_name = name
-                    self._current_lyrics = lyrics
+                self._current_track_id = track_id
+                self._current_track_name = name
+                self._current_lyrics = lyrics
                 self._pending_fetch = None
 
     def run(self):
@@ -258,48 +257,17 @@ class EtherealLyrics:
                     or name != self._current_track_name
                 )
 
-                # Detect resume: same track but was paused, now playing with no lyrics
-                is_resume = (
-                    not track_changed
-                    and track_id == self._current_track_id
-                    and is_playing
-                    and self._current_lyrics is None
-                )
-
-                # Retry lyrics fetch if we have no lyrics for current track
-                needs_retry = (
-                    not track_changed
-                    and track_id == self._current_track_id
-                    and self._current_lyrics is None
-                )
-
-                if track_changed or is_resume or needs_retry:
+                if track_changed:
+                    self._current_track_id = track_id
+                    self._current_track_name = name
                     self._last_progress_ms = progress_ms
                     self.ui._prev_lyric_idx = -1
                     self.ui._word_index = 0
                     self.lyrics_fetcher.reset_timing(track_id)
-                    # Reset interpolation state for new track
                     if self._use_local and self._local_client:
                         self._local_client.reset_interpolation()
-                    
-                    # Clear old lyrics immediately on track change to prevent showing previous song's lyrics
-                    if track_changed:
-                        self._current_lyrics = None
-                    
-                    # Fetch lyrics in background thread
-                    self._fetch_lyrics_async(name, artist, album, duration_ms, track_id, track_changed)
-                elif track_id and progress_ms < self._last_progress_ms - 1000:
-                    # Position jumped backward — new song or restart
-                    self._last_progress_ms = progress_ms
-                    self.ui._prev_lyric_idx = -1
-                    self.ui._word_index = 0
-                    self.lyrics_fetcher.reset_timing(track_id)
-                    # Reset interpolation state for new track
-                    if self._use_local and self._local_client:
-                        self._local_client.reset_interpolation()
-                    # Clear old lyrics for track restart
                     self._current_lyrics = None
-                    self._fetch_lyrics_async(name, artist, album, duration_ms, track_id, True)
+                    self._fetch_lyrics_async(name, artist, album, duration_ms, track_id, track_changed)
                 elif track_id and abs(progress_ms - self._last_progress_ms) > 2000:
                     # Seek detected — reset dynamic offset
                     self.lyrics_fetcher.reset_timing(track_id)
@@ -313,12 +281,9 @@ class EtherealLyrics:
                 # Check for completed background lyrics fetch
                 self._check_pending_lyrics()
  
-# Ensure lyrics is a Lyrics object or None
-                if self._current_lyrics is not None and not hasattr(self._current_lyrics, 'lines'):
-                    self.ui.print_error(f"Invalid lyrics object: {type(self._current_lyrics)}")
-                    self._current_lyrics = None
-
-                self.ui.render(render_track, self._current_lyrics, self._fetching_lyrics)
+                # Only show loading when we have no lyrics yet
+                show_fetching = self._fetching_lyrics and self._current_lyrics is None
+                self.ui.render(render_track, self._current_lyrics, show_fetching)
                 time.sleep(0.05)
 
             except KeyboardInterrupt:
@@ -340,7 +305,6 @@ def show_lyrics_debug():
     settings = get_settings()
 
     fetcher = MultiProviderLyricsFetcher(
-        musixmatch_api_key=settings.musixmatch_api_key,
         static_offset_ms=settings.lyric_offset_ms,
     )
     local_client = LocalSpotifyClient()

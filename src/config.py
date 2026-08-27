@@ -13,9 +13,6 @@ class Settings(BaseSettings):
         default="http://localhost:8888/callback", env="SPOTIFY_REDIRECT_URI"
     )
 
-    musixmatch_api_key: str = Field(default="", env="MUSIXMATCH_API_KEY")
-    genius_access_token: str = Field(default="", env="GENIUS_ACCESS_TOKEN")
-
     lyric_offset_ms: int = Field(default=0, env="LYRIC_OFFSET_MS")
 
     lyric_color: str = Field(default="bold white", env="LYRIC_COLOR")

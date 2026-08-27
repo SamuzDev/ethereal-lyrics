@@ -1,17 +1,9 @@
-"""Multi-provider lyrics fetcher with fallback support.
+"""Lyrics fetcher using LRCLib (free, no auth required)."""
 
-Providers:
-- LRCLib: Free, synced lyrics, no auth required
-- Musixmatch: High quality synced lyrics (word-level via desktop API, no key needed)
-"""
-
-import httpx
-import json
-import re
 import time
+import httpx
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from pathlib import Path
 from abc import ABC, abstractmethod
 
 
@@ -350,7 +342,7 @@ class LRCLibProvider(LyricsProvider):
     def __init__(self):
         self.base_url = "https://lrclib.net/api"
         self.client = httpx.Client(
-            timeout=10.0,
+            timeout=httpx.Timeout(connect=3.0, read=3.0, write=3.0, pool=3.0),
             headers={"User-Agent": "ethereal-lyrics/0.1.0"},
         )
 
@@ -368,12 +360,12 @@ class LRCLibProvider(LyricsProvider):
     def _fuzzy_match(self, a: str, b: str, threshold: float = 0.6) -> bool:
         return SequenceMatcher(None, self._normalize(a), self._normalize(b)).ratio() >= threshold
 
-    def _fuzzy_match_track_artist(self, track_a: str, artist_a: str, track_b: str, artist_b: str, threshold: float = 0.8) -> bool:
+    def _fuzzy_match_track_artist(self, track_a: str, artist_a: str, track_b: str, artist_b: str, threshold: float = 0.5) -> bool:
         """Match both track name and artist name for better accuracy."""
         track_match = SequenceMatcher(None, self._normalize(track_a), self._normalize(track_b)).ratio()
         artist_match = SequenceMatcher(None, self._normalize(artist_a), self._normalize(artist_b)).ratio()
-        # Require both to match well, with track being more important
-        combined = (track_match * 0.7) + (artist_match * 0.3)
+        # Combined: track 60%, artist 40%
+        combined = (track_match * 0.6) + (artist_match * 0.4)
         return combined >= threshold
 
     def fetch(
@@ -384,27 +376,31 @@ class LRCLibProvider(LyricsProvider):
         duration_ms: int | None = None,
     ) -> Lyrics | None:
         try:
-            response = self.client.get(
-                f"{self.base_url}/get",
-                params={
-                    "track_name": track_name,
-                    "artist_name": artist_name,
-                    "album_name": album_name or "",
-                    "duration": duration_ms // 1000 if duration_ms else None,
-                },
-            )
+            # Try /get first (direct match)
+            try:
+                response = self.client.get(
+                    f"{self.base_url}/get",
+                    params={
+                        "track_name": track_name,
+                        "artist_name": artist_name,
+                        "album_name": album_name or "",
+                        "duration": duration_ms // 1000 if duration_ms else None,
+                    },
+                )
 
-            if response.status_code == 200:
-                data = response.json()
-                # Validate the direct get result matches our query
-                if self._fuzzy_match_track_artist(
-                    data.get("trackName", ""), data.get("artistName", ""),
-                    track_name, artist_name
-                ):
-                    result = self._parse_response(data, track_name, artist_name, album_name)
-                    if result:
-                        return result
+                if response.status_code == 200:
+                    data = response.json()
+                    if self._fuzzy_match_track_artist(
+                        data.get("trackName", ""), data.get("artistName", ""),
+                        track_name, artist_name
+                    ):
+                        result = self._parse_response(data, track_name, artist_name, album_name)
+                        if result:
+                            return result
+            except httpx.HTTPError:
+                pass
 
+            # Fallback to /search
             response = self.client.get(
                 f"{self.base_url}/search",
                 params={
@@ -423,6 +419,16 @@ class LRCLibProvider(LyricsProvider):
                     ):
                         result = self._parse_response(
                             item, track_name, artist_name, album_name
+                        )
+                        if result:
+                            return result
+
+                # Fallback: accept first result if it has synced lyrics
+                if results:
+                    first = results[0]
+                    if first.get("syncedLyrics"):
+                        result = self._parse_response(
+                            first, track_name, artist_name, album_name
                         )
                         if result:
                             return result
@@ -464,394 +470,17 @@ class LRCLibProvider(LyricsProvider):
         )
 
 
-class MusixmatchProvider(LyricsProvider):
-    """Musixmatch provider - high quality synced lyrics via desktop API.
-
-    Uses the same unauthenticated desktop API as canticle/sptlrx/musixmatch-freeAPI.
-    Automatically obtains and caches tokens. No API key required.
-    """
-
-    BASE_URL = "https://apic-desktop.musixmatch.com/ws/1.1/"
-    APP_ID = "web-desktop-app-v1.0"
-    USER_AGENT = (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    )
-
-    def __init__(self):
-        self.client = httpx.Client(timeout=15.0, follow_redirects=True)
-        self._token: str | None = None
-        self._token_at: float = 0.0
-        self._token_path = Path.home() / ".cache" / "ethereal-lyrics" / "musixmatch_token.json"
-        self._load_cached_token()
-
-    @property
-    def name(self) -> str:
-        return "musixmatch"
-
-    @property
-    def is_available(self) -> bool:
-        return True
-
-    def _request(self, endpoint: str, params: dict) -> dict | None:
-        """Make an authenticated request to the Musixmatch desktop API."""
-        query = {"app_id": self.APP_ID, "format": "json", **params}
-        headers = {
-            "User-Agent": self.USER_AGENT,
-            "Cookie": "x-mxm-token-guid=",
-            "x-mxm-user-token": self._token or "",
-        }
-        try:
-            response = self.client.get(
-                f"{self.BASE_URL}{endpoint}",
-                headers=headers,
-                params=query,
-            )
-            if response.status_code == 200:
-                text = response.text
-                if text.lstrip().startswith("<"):
-                    return None
-                try:
-                    return json.loads(text)
-                except json.JSONDecodeError:
-                    return None
-        except (httpx.HTTPError, json.JSONDecodeError):
-            pass
-        return None
-
-    def _load_cached_token(self) -> None:
-        """Load cached token from disk (valid 6 hours)."""
-        try:
-            if self._token_path.exists():
-                data = json.loads(self._token_path.read_text())
-                if data.get("v") and data.get("t", 0) > 0:
-                    self._token = data["v"]
-                    self._token_at = data["t"]
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    def _save_token(self, token: str) -> None:
-        """Persist token to disk (valid 6 hours)."""
-        self._token = token
-        self._token_at = time.time()
-        try:
-            self._token_path.parent.mkdir(parents=True, exist_ok=True)
-            self._token_path.write_text(json.dumps({"v": token, "t": self._token_at}))
-        except OSError:
-            pass
-
-    def _get_token(self, force: bool = False) -> str | None:
-        """Obtain a user token from the desktop API.
-
-        Tokens are cached for 6 hours. On rate limit (captcha/401),
-        retries with exponential backoff.
-        """
-        self._load_cached_token()
-        if not force and self._token and time.time() - self._token_at < 21600:
-            return self._token
-
-        for delay in (0, 20, 45, 90):
-            if delay:
-                time.sleep(delay)
-            try:
-                ts = str(int(time.time() * 1000))
-                data = self._request("token.get", {"t": ts})
-                body = (data or {}).get("message", {}).get("body", {})
-                if isinstance(body, dict) and "user_token" in body:
-                    tok = body["user_token"]
-                    if tok and not tok.startswith("UpgradeOnly"):
-                        self._save_token(tok)
-                        return tok
-            except Exception:
-                continue
-
-        return self._token
-
-    def _parse_richsync(self, richsync_body: str) -> list[LyricLine]:
-        """Parse word-level richsync data into LyricLine objects.
-
-        Richsync format: list of {ts, te, l: [{c, o}], x}
-        - ts: line start time (seconds)
-        - te: line end time (seconds)
-        - l: list of {c: char, o: offset_from_line_start}
-        - x: full line text
-        """
-        try:
-            entries = json.loads(richsync_body)
-        except (json.JSONDecodeError, TypeError):
-            return []
-
-        lines = []
-        for entry in entries:
-            ts = entry.get("ts", 0)
-            te = entry.get("te", ts)
-            words = entry.get("l", [])
-            line_text = entry.get("x", "").strip()
-            if not line_text or not words:
-                continue
-
-            start_ms = int(ts * 1000)
-            end_ms = int(te * 1000)
-
-            # Build word list and positions from character-level data
-            word_list: list[str] = []
-            word_positions: list[tuple[int, int]] = []
-
-            current_word = ""
-            current_start_char = 0
-            for i, item in enumerate(words):
-                c = item.get("c", "")
-                if c == " ":
-                    if current_word:
-                        word_list.append(current_word)
-                        word_positions.append((current_start_char, current_start_char + len(current_word)))
-                        current_word = ""
-                    if i + 1 < len(words):
-                        current_start_char = i + 1
-                else:
-                    if not current_word:
-                        current_start_char = i
-                    current_word += c
-
-            if current_word:
-                word_list.append(current_word)
-                word_positions.append((current_start_char, current_start_char + len(current_word)))
-
-            line = LyricLine(
-                text=line_text,
-                start_ms=start_ms,
-                end_ms=end_ms,
-            )
-            if word_list:
-                line._words = word_list
-                line._word_positions = word_positions
-            lines.append(line)
-
-        return lines
-
-    def _parse_subtitles(self, subtitle_body: str) -> list[LyricLine]:
-        """Parse line-level subtitle data into LyricLine objects.
-
-        Subtitle format: list of {text, time: {total, minutes, seconds, hundredths}}
-        """
-        try:
-            entries = json.loads(subtitle_body)
-        except (json.JSONDecodeError, TypeError):
-            return []
-
-        lines = []
-        for entry in entries:
-            text = entry.get("text", "").strip()
-            time_data = entry.get("time", {})
-            total = time_data.get("total", 0)
-            if not text:
-                continue
-            lines.append(LyricLine(
-                text=text,
-                start_ms=int(total * 1000),
-            ))
-
-        # Set end_ms from next line start
-        for i in range(len(lines)):
-            if i + 1 < len(lines):
-                lines[i].end_ms = lines[i + 1].start_ms
-            else:
-                lines[i].end_ms = lines[i].start_ms + 5000
-
-        return lines
-
-    @staticmethod
-    def _deep_find(obj, key):
-        """Recursively search for a key in nested dicts/lists."""
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                if k == key:
-                    return v
-                r = MusixmatchProvider._deep_find(v, key)
-                if r is not None:
-                    return r
-        elif isinstance(obj, list):
-            for v in obj:
-                r = MusixmatchProvider._deep_find(v, key)
-                if r is not None:
-                    return r
-        return None
-
-    @staticmethod
-    def _normalize(text: str) -> str:
-        """Normalize text for fuzzy matching."""
-        import unicodedata
-        s = unicodedata.normalize("NFKD", text or "")
-        s = "".join(c for c in s if not unicodedata.combining(c))
-        s = re.sub(r"\(feat\.[^)]*\)|\[[^\]]*\]", " ", s.lower())
-        s = re.sub(r"[^a-z0-9]+", " ", s)
-        return s.strip()
-
-    def _is_trusted_match(self, track: dict, title: str, artist: str, duration_s: float) -> bool:
-        """Verify that the matched track is trustworthy."""
-        wt, wa = self._normalize(title), self._normalize(artist)
-        gt = self._normalize(track.get("track_name", ""))
-        ga = self._normalize(track.get("artist_name", ""))
-        tl = track.get("track_length") or 0
-        dd = abs(tl - duration_s) if (tl and duration_s) else 9999
-        if dd > 15 and dd != 9999:
-            return False
-        title_ok = bool(gt) and (gt == wt or wt in gt or gt in wt)
-        artist_ok = bool(ga) and (ga == wa or wa in ga or ga in wa)
-        return (title_ok and artist_ok) or (dd <= 4 and (title_ok or artist_ok))
-
-    def _fetch_with_token(self, track_name: str, artist_name: str, album_name: str | None, duration_ms: int | None, token: str) -> Lyrics | None:
-        """Attempt to fetch lyrics with the given token. Returns None on 401 (token refresh needed)."""
-        duration_s = duration_ms / 1000 if duration_ms else 0
-
-        # Step 1: macro.subtitles.get — matches track + returns line-level sync
-        macro_params = {
-            "namespace": "lyrics_richsynched",
-            "subtitle_format": "lrc",
-            "q_track": track_name,
-            "q_artist": artist_name,
-            "q_artists": artist_name,
-            "q_album": album_name or "",
-            "usertoken": token,
-        }
-        if duration_ms:
-            macro_params["q_duration"] = str(int(duration_s))
-
-        macro = self._request("macro.subtitles.get", macro_params)
-        if not macro:
-            return None
-
-        # Check if macro is a dict (not a string or other type)
-        if not isinstance(macro, dict):
-            return None
-
-        # Check for token exhaustion
-        status = self._deep_find(macro, "status_code")
-        if status == 401:
-            return None
-
-        # Get matched track
-        calls = macro.get("message", {}).get("body", {}).get("macro_calls", {})
-        if not isinstance(calls, dict):
-            return None
-        matcher_calls = calls.get("matcher.track.get", {})
-        if not isinstance(matcher_calls, dict):
-            return None
-        message = matcher_calls.get("message", {})
-        if not isinstance(message, dict):
-            return None
-        body = message.get("body", {})
-        if not isinstance(body, dict):
-            return None
-        matcher_track = body.get("track", {})
-        if not matcher_track or not isinstance(matcher_track, dict) or not self._is_trusted_match(matcher_track, track_name, artist_name, duration_s):
-            return None
-
-        ctid = matcher_track.get("commontrack_id")
-        if not ctid or matcher_track.get("instrumental"):
-            return None
-
-        track_name_out = matcher_track.get("track_name", track_name)
-        artist_name_out = matcher_track.get("artist_name", artist_name)
-
-        # Step 2: Try richsync (word-level sync) — only if track has it
-        if matcher_track.get("has_richsync"):
-            time.sleep(1)
-            rich = self._request("track.richsync.get", {
-                "commontrack_id": ctid,
-                "usertoken": token,
-                "namespace": "lyrics_richsynched",
-                "subtitle_format": "lrc",
-            })
-            if rich:
-                rich_status = self._deep_find(rich, "status_code")
-                if rich_status == 401:
-                    return None
-                rs_body = self._deep_find(rich, "richsync_body")
-                if isinstance(rs_body, str) and rs_body:
-                    lines = self._parse_richsync(rs_body)
-                    if lines:
-                        return Lyrics(
-                            track_name=track_name_out,
-                            artist_name=artist_name_out,
-                            album_name=album_name,
-                            lines=lines,
-                            is_synced=True,
-                            provider=self.name,
-                        )
-
-        # Step 3: Fallback to line-level subtitles
-        sub_body = self._deep_find(macro, "subtitle_body")
-        if isinstance(sub_body, str) and "[" in sub_body:
-            lines = self._parse_subtitles(sub_body)
-            if lines:
-                return Lyrics(
-                    track_name=track_name_out,
-                    artist_name=artist_name_out,
-                    album_name=album_name,
-                    lines=lines,
-                    is_synced=True,
-                    provider=self.name,
-                )
-
-        # Step 4: Fallback to plain lyrics
-        plain = self._deep_find(macro, "lyrics_body")
-        if isinstance(plain, str) and plain.strip():
-            lines = parse_plain_lyrics(plain)
-            if lines:
-                return Lyrics(
-                    track_name=track_name_out,
-                    artist_name=artist_name_out,
-                    album_name=album_name,
-                    lines=lines,
-                    is_synced=False,
-                    provider=self.name,
-                )
-
-        return None
-
-    def fetch(
-        self,
-        track_name: str,
-        artist_name: str,
-        album_name: str | None = None,
-        duration_ms: int | None = None,
-    ) -> Lyrics | None:
-        token = self._get_token()
-        if not token:
-            return None
-
-        result = self._fetch_with_token(track_name, artist_name, album_name, duration_ms, token)
-        if result is not None:
-            return result
-
-        # Token may be exhausted — refresh once and retry
-        token = self._get_token(force=True)
-        if not token:
-            return None
-
-        return self._fetch_with_token(track_name, artist_name, album_name, duration_ms, token)
-
-
 class MultiProviderLyricsFetcher:
-    """Multi-provider lyrics fetcher with fallback."""
+    """Lyrics fetcher using LRCLib (free, no auth required)."""
 
     def __init__(
         self,
-        musixmatch_api_key: str | None = None,
-        genius_access_token: str | None = None,
         static_offset_ms: int = 0,
     ):
-        self.providers: list[LyricsProvider] = []
+        self.providers: list[LyricsProvider] = [LRCLibProvider()]
         self._cache: dict[str, Lyrics] = {}
         self._static_offset_ms = static_offset_ms
         self._dynamic_offsets: dict[str, DynamicOffset] = {}
-
-        # Always add LRCLib (free, no auth)
-        self.providers.append(LRCLibProvider())
-
-        # Always add Musixmatch (desktop API, auto-token, no key needed)
-        self.providers.append(MusixmatchProvider())
 
     def _get_dynamic_offset(self, track_id: str) -> DynamicOffset:
         """Get or create dynamic offset for a track."""
@@ -878,55 +507,28 @@ class MultiProviderLyricsFetcher:
         duration_ms: int | None = None,
         track_id: str | None = None,
     ) -> Lyrics | None:
-        """Fetch lyrics with fallback across providers.
-
-        Prefers synced lyrics. If a provider returns unsynced lyrics,
-        continues to the next provider. Only returns unsynced as last resort.
-        """
+        """Fetch lyrics from LRCLib (free, no auth required)."""
         cache_key = f"{artist_name}:{track_name}".lower()
         if cache_key in self._cache:
             cached = self._cache[cache_key]
-            # Attach dynamic offset if track_id provided
             if track_id:
                 cached._dynamic_offset = self._get_dynamic_offset(track_id)
             return cached
 
-        unsynced_fallback: Lyrics | None = None
+        result = self.providers[0].fetch(
+            track_name=track_name,
+            artist_name=artist_name,
+            album_name=album_name,
+            duration_ms=duration_ms,
+        )
 
-        for provider in self.providers:
-            if not provider.is_available:
-                continue
+        if result:
+            result.offset_ms = self._static_offset_ms
+            if track_id:
+                result._dynamic_offset = self._get_dynamic_offset(track_id)
+            self._cache[cache_key] = result
 
-            result = provider.fetch(
-                track_name=track_name,
-                artist_name=artist_name,
-                album_name=album_name,
-                duration_ms=duration_ms,
-            )
-
-            if result:
-                # Set static offset
-                result.offset_ms = self._static_offset_ms
-
-                # Attach dynamic offset if track_id provided
-                if track_id:
-                    result._dynamic_offset = self._get_dynamic_offset(track_id)
-
-                # If synced, use immediately — this is what we want
-                if result.is_synced:
-                    self._cache[cache_key] = result
-                    return result
-
-                # If not synced, save as fallback and keep trying
-                if unsynced_fallback is None:
-                    unsynced_fallback = result
-
-        # Return synced if found, otherwise unsynced fallback, or None
-        if unsynced_fallback:
-            self._cache[cache_key] = unsynced_fallback
-            return unsynced_fallback
-
-        return None
+        return result
 
     def get_provider_status(self) -> list[dict]:
         """Get status of all providers."""
