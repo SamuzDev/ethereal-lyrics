@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ethereal-lyrics"
-version = "0.5.9"
+version = "0.5.10"
 description = "Display synced Spotify lyrics in your terminal with an aesthetic UI"
 readme = "README.md"
 license = "MIT"
