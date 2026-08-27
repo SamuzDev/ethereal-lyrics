@@ -368,7 +368,7 @@ class LRCLibProvider(LyricsProvider):
     def _fuzzy_match(self, a: str, b: str, threshold: float = 0.6) -> bool:
         return SequenceMatcher(None, self._normalize(a), self._normalize(b)).ratio() >= threshold
 
-    def _fuzzy_match_track_artist(self, track_a: str, artist_a: str, track_b: str, artist_b: str, threshold: float = 0.7) -> bool:
+    def _fuzzy_match_track_artist(self, track_a: str, artist_a: str, track_b: str, artist_b: str, threshold: float = 0.8) -> bool:
         """Match both track name and artist name for better accuracy."""
         track_match = SequenceMatcher(None, self._normalize(track_a), self._normalize(track_b)).ratio()
         artist_match = SequenceMatcher(None, self._normalize(artist_a), self._normalize(artist_b)).ratio()
@@ -396,9 +396,14 @@ class LRCLibProvider(LyricsProvider):
 
             if response.status_code == 200:
                 data = response.json()
-                result = self._parse_response(data, track_name, artist_name, album_name)
-                if result:
-                    return result
+                # Validate the direct get result matches our query
+                if self._fuzzy_match_track_artist(
+                    data.get("trackName", ""), data.get("artistName", ""),
+                    track_name, artist_name
+                ):
+                    result = self._parse_response(data, track_name, artist_name, album_name)
+                    if result:
+                        return result
 
             response = self.client.get(
                 f"{self.base_url}/search",
@@ -723,7 +728,10 @@ class MusixmatchProvider(LyricsProvider):
 
         # Get matched track
         calls = macro.get("message", {}).get("body", {}).get("macro_calls", {})
-        matcher_track = calls.get("matcher.track.get", {}).get("message", {}).get("body", {}).get("track", {})
+        matcher_calls = calls.get("matcher.track.get", {})
+        if not isinstance(matcher_calls, dict):
+            return None
+        matcher_track = matcher_calls.get("message", {}).get("body", {}).get("track", {})
         if not matcher_track or not self._is_trusted_match(matcher_track, track_name, artist_name, duration_s):
             return None
 

@@ -168,7 +168,10 @@ class EtherealLyrics:
             return  # Let the existing one finish
         
         def fetch_and_store():
-            lyrics = self._fetch_lyrics_for_track(name, artist, album, duration_ms, track_id)
+            try:
+                lyrics = self._fetch_lyrics_for_track(name, artist, album, duration_ms, track_id)
+            except Exception:
+                lyrics = None
             with self._lyrics_lock:
                 self._pending_fetch = (track_id, name, lyrics, track_changed)
         
