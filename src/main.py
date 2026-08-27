@@ -230,9 +230,14 @@ class EtherealLyrics:
                     and self._current_lyrics is None
                 )
 
-                if track_changed or is_resume:
-                    self._current_track_id = track_id
-                    self._current_track_name = name
+                # Retry lyrics fetch if we have no lyrics for current track
+                needs_retry = (
+                    not track_changed
+                    and track_id == self._current_track_id
+                    and self._current_lyrics is None
+                )
+
+                if track_changed or is_resume or needs_retry:
                     self._last_progress_ms = progress_ms
                     self.ui._prev_lyric_idx = -1
                     self.ui._word_index = 0
@@ -240,13 +245,17 @@ class EtherealLyrics:
                     # Reset interpolation state for new track
                     if self._use_local and self._local_client:
                         self._local_client.reset_interpolation()
-                    self._current_lyrics = self._fetch_lyrics_for_track(
+                    new_lyrics = self._fetch_lyrics_for_track(
                         name, artist, album, duration_ms, track_id
                     )
+                    if new_lyrics is not None or track_changed:
+                        # Only commit track_id if we got lyrics OR it's a new track
+                        self._current_track_id = track_id
+                        self._current_track_name = name
+                        self._current_lyrics = new_lyrics
+                    # If no lyrics and not track_changed, keep old track_id to retry next loop
                 elif track_id and progress_ms < self._last_progress_ms - 1000:
                     # Position jumped backward — new song or restart
-                    self._current_track_id = track_id
-                    self._current_track_name = name
                     self._last_progress_ms = progress_ms
                     self.ui._prev_lyric_idx = -1
                     self.ui._word_index = 0
@@ -254,9 +263,13 @@ class EtherealLyrics:
                     # Reset interpolation state for new track
                     if self._use_local and self._local_client:
                         self._local_client.reset_interpolation()
-                    self._current_lyrics = self._fetch_lyrics_for_track(
+                    new_lyrics = self._fetch_lyrics_for_track(
                         name, artist, album, duration_ms, track_id
                     )
+                    if new_lyrics is not None:
+                        self._current_track_id = track_id
+                        self._current_track_name = name
+                        self._current_lyrics = new_lyrics
                 elif track_id and abs(progress_ms - self._last_progress_ms) > 2000:
                     # Seek detected — reset dynamic offset
                     self.lyrics_fetcher.reset_timing(track_id)
@@ -280,11 +293,11 @@ class EtherealLyrics:
                 break
             except Exception as e:
                 self.ui.stop()
+                self._restore_terminal()
                 self.ui.print_error(str(e))
                 time.sleep(2)
 
         self.ui.stop()
-        self.ui.console.clear()
         self._restore_terminal()
 
 

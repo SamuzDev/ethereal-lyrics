@@ -187,8 +187,8 @@ class TerminalUI:
         if self._live is not None:
             self._live.stop()
             self._live = None
-        # Reset terminal state
-        self.console.show_cursor(False)
+        # Reset terminal state - show cursor
+        self.console.show_cursor(True)
         self.console.clear()
 
     def print_error(self, msg: str) -> None:
