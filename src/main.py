@@ -80,6 +80,7 @@ class EtherealLyrics:
 
     def _check_keypress(self) -> str | None:
         """Check for keypress without blocking."""
+        # Try stdin first (works with piped input)
         fd = sys.stdin.fileno()
         try:
             import select
@@ -89,6 +90,25 @@ class EtherealLyrics:
                 return data.decode('utf-8', errors='ignore') if data else None
         except (OSError, IOError, ValueError):
             pass
+
+        # Fallback: read directly from /dev/tty (works in raw terminal mode like nvim/cava)
+        try:
+            tty_fd = os.open("/dev/tty", os.O_RDONLY)
+            try:
+                # Make it non-blocking
+                import fcntl
+                flags = fcntl.fcntl(tty_fd, fcntl.F_GETFL)
+                fcntl.fcntl(tty_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+                
+                r, _, _ = select.select([tty_fd], [], [], 0)
+                if r:
+                    data = os.read(tty_fd, 1)
+                    return data.decode('utf-8', errors='ignore') if data else None
+            finally:
+                os.close(tty_fd)
+        except (OSError, IOError, ValueError):
+            pass
+
         return None
 
     def _fetch_lyrics_for_track(self, name: str, artist: str, album: str, duration_ms: int, track_id: str | None = None) -> Lyrics | None:
