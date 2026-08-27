@@ -176,6 +176,8 @@ class TerminalUI:
                 self._build_frame(track, lyrics),
                 console=self.console,
                 refresh_per_second=20,
+                vertical_overflow="visible",
+                transient=True,
             )
             self._live.start()
         else:
