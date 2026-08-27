@@ -7,6 +7,7 @@ import signal
 import atexit
 import tty
 import termios
+import threading
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
@@ -75,6 +76,9 @@ class EtherealLyrics:
         self._term_fd = sys.stdin.fileno()
         self._term_settings = None
         self._is_tty = os.isatty(self._term_fd)
+        self._lyrics_thread: threading.Thread | None = None
+        self._lyrics_lock = threading.Lock()
+        self._pending_fetch: tuple | None = None
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -156,6 +160,31 @@ class EtherealLyrics:
             duration_ms=duration_ms,
             track_id=track_id,
         )
+
+    def _fetch_lyrics_async(self, name: str, artist: str, album: str, duration_ms: int, track_id: str, track_changed: bool) -> None:
+        """Start background lyrics fetch."""
+        # Cancel any existing fetch
+        if self._lyrics_thread and self._lyrics_thread.is_alive():
+            return  # Let the existing one finish
+        
+        def fetch_and_store():
+            lyrics = self._fetch_lyrics_for_track(name, artist, album, duration_ms, track_id)
+            with self._lyrics_lock:
+                self._pending_fetch = (track_id, name, lyrics, track_changed)
+        
+        self._lyrics_thread = threading.Thread(target=fetch_and_store, daemon=True)
+        self._lyrics_thread.start()
+
+    def _check_pending_lyrics(self) -> None:
+        """Check if background lyrics fetch completed and apply results."""
+        with self._lyrics_lock:
+            if self._pending_fetch is not None:
+                track_id, name, lyrics, track_changed = self._pending_fetch
+                if lyrics is not None or track_changed:
+                    self._current_track_id = track_id
+                    self._current_track_name = name
+                    self._current_lyrics = lyrics
+                self._pending_fetch = None
 
     def run(self):
         self._setup_terminal()
@@ -245,15 +274,9 @@ class EtherealLyrics:
                     # Reset interpolation state for new track
                     if self._use_local and self._local_client:
                         self._local_client.reset_interpolation()
-                    new_lyrics = self._fetch_lyrics_for_track(
-                        name, artist, album, duration_ms, track_id
-                    )
-                    if new_lyrics is not None or track_changed:
-                        # Only commit track_id if we got lyrics OR it's a new track
-                        self._current_track_id = track_id
-                        self._current_track_name = name
-                        self._current_lyrics = new_lyrics
-                    # If no lyrics and not track_changed, keep old track_id to retry next loop
+                    
+                    # Fetch lyrics in background thread
+                    self._fetch_lyrics_async(name, artist, album, duration_ms, track_id, track_changed)
                 elif track_id and progress_ms < self._last_progress_ms - 1000:
                     # Position jumped backward — new song or restart
                     self._last_progress_ms = progress_ms
@@ -263,13 +286,7 @@ class EtherealLyrics:
                     # Reset interpolation state for new track
                     if self._use_local and self._local_client:
                         self._local_client.reset_interpolation()
-                    new_lyrics = self._fetch_lyrics_for_track(
-                        name, artist, album, duration_ms, track_id
-                    )
-                    if new_lyrics is not None:
-                        self._current_track_id = track_id
-                        self._current_track_name = name
-                        self._current_lyrics = new_lyrics
+                    self._fetch_lyrics_async(name, artist, album, duration_ms, track_id, True)
                 elif track_id and abs(progress_ms - self._last_progress_ms) > 2000:
                     # Seek detected — reset dynamic offset
                     self.lyrics_fetcher.reset_timing(track_id)
@@ -279,6 +296,9 @@ class EtherealLyrics:
  
                 if track_id:
                     self.lyrics_fetcher.update_timing(track_id, progress_ms)
+ 
+                # Check for completed background lyrics fetch
+                self._check_pending_lyrics()
  
                 # Ensure lyrics is a Lyrics object or None
                 if self._current_lyrics is not None and not hasattr(self._current_lyrics, 'lines'):
