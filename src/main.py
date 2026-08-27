@@ -79,6 +79,7 @@ class EtherealLyrics:
         self._lyrics_thread: threading.Thread | None = None
         self._lyrics_lock = threading.Lock()
         self._pending_fetch: tuple | None = None
+        self._fetching_lyrics: bool = False
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -167,6 +168,8 @@ class EtherealLyrics:
         if self._lyrics_thread and self._lyrics_thread.is_alive():
             return  # Let the existing one finish
         
+        self._fetching_lyrics = True
+        
         def fetch_and_store():
             try:
                 lyrics = self._fetch_lyrics_for_track(name, artist, album, duration_ms, track_id)
@@ -174,6 +177,7 @@ class EtherealLyrics:
                 lyrics = None
             with self._lyrics_lock:
                 self._pending_fetch = (track_id, name, lyrics, track_changed)
+                self._fetching_lyrics = False
         
         self._lyrics_thread = threading.Thread(target=fetch_and_store, daemon=True)
         self._lyrics_thread.start()
@@ -230,7 +234,7 @@ class EtherealLyrics:
                         track_id = api_track.track_id
 
                 if not name:
-                    self.ui.render(None, None)
+                    self.ui.render(None, None, False)
                     time.sleep(0.3)
                     continue
 
@@ -309,12 +313,12 @@ class EtherealLyrics:
                 # Check for completed background lyrics fetch
                 self._check_pending_lyrics()
  
-                # Ensure lyrics is a Lyrics object or None
+# Ensure lyrics is a Lyrics object or None
                 if self._current_lyrics is not None and not hasattr(self._current_lyrics, 'lines'):
                     self.ui.print_error(f"Invalid lyrics object: {type(self._current_lyrics)}")
                     self._current_lyrics = None
- 
-                self.ui.render(render_track, self._current_lyrics)
+
+                self.ui.render(render_track, self._current_lyrics, self._fetching_lyrics)
                 time.sleep(0.05)
 
             except KeyboardInterrupt:

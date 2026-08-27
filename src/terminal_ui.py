@@ -169,11 +169,12 @@ class TerminalUI:
         self,
         track: Any,
         lyrics: Any,
+        fetching: bool = False,
     ) -> None:
         if self._live is None:
             self.console.clear()
             self._live = Live(
-                self._build_frame(track, lyrics),
+                self._build_frame(track, lyrics, fetching),
                 console=self.console,
                 refresh_per_second=20,
                 vertical_overflow="visible",
@@ -181,7 +182,7 @@ class TerminalUI:
             )
             self._live.start()
         else:
-            self._live.update(self._build_frame(track, lyrics))
+            self._live.update(self._build_frame(track, lyrics, fetching))
 
     def stop(self) -> None:
         if self._live is not None:
@@ -233,6 +234,7 @@ class TerminalUI:
         self,
         track: Any,
         lyrics: Any,
+        fetching: bool = False,
     ) -> Text:
         text = Text()
 
@@ -255,7 +257,10 @@ class TerminalUI:
                 if track_album:
                     text.append(f"  {track_album}\n", style="dim " + self._color)
                 text.append("\n", style=self._color)
-                text.append("  \u25b8 No lyrics found \u25c0\n", style="yellow")
+                if fetching:
+                    text.append("  \u25b8 Loading lyrics... \u25c0\n", style="cyan")
+                else:
+                    text.append("  \u25b8 No lyrics found \u25c0\n", style="yellow")
             else:
                 empty_lines = (height - 1) // 2
                 for _ in range(max(0, empty_lines)):
