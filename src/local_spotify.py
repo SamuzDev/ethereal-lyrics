@@ -115,13 +115,17 @@ class LocalSpotifyClient:
             elapsed_ms = int((now - self._last_read_time) * 1000)
             position = self._last_position + elapsed_ms
 
-            # Periodically correct drift from D-Bus (every ~5s)
-            self._poll_count += 1
-            if self._poll_count >= 100:
-                self._poll_count = 0
-                # Blend: 90% interpolated + 10% real (smooth correction)
-                position = int(position * 0.9 + real_pos * 0.1)
-                self._last_position = position
+            # Detect seek: if D-Bus position differs significantly, use real position
+            if abs(real_pos - position) > 2000:
+                position = real_pos
+            else:
+                # Periodically correct drift from D-Bus (every ~5s)
+                self._poll_count += 1
+                if self._poll_count >= 100:
+                    self._poll_count = 0
+                    # Blend: 90% interpolated + 10% real (smooth correction)
+                    position = int(position * 0.9 + real_pos * 0.1)
+                    self._last_position = position
         else:
             position = real_pos
             self._anchored = True
