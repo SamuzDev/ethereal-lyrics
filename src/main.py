@@ -278,6 +278,10 @@ class EtherealLyrics:
                     if self._use_local and self._local_client:
                         self._local_client.reset_interpolation()
                     
+                    # Clear old lyrics immediately on track change to prevent showing previous song's lyrics
+                    if track_changed:
+                        self._current_lyrics = None
+                    
                     # Fetch lyrics in background thread
                     self._fetch_lyrics_async(name, artist, album, duration_ms, track_id, track_changed)
                 elif track_id and progress_ms < self._last_progress_ms - 1000:
@@ -289,6 +293,8 @@ class EtherealLyrics:
                     # Reset interpolation state for new track
                     if self._use_local and self._local_client:
                         self._local_client.reset_interpolation()
+                    # Clear old lyrics for track restart
+                    self._current_lyrics = None
                     self._fetch_lyrics_async(name, artist, album, duration_ms, track_id, True)
                 elif track_id and abs(progress_ms - self._last_progress_ms) > 2000:
                     # Seek detected — reset dynamic offset
