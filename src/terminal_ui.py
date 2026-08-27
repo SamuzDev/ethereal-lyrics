@@ -248,7 +248,8 @@ class TerminalUI:
                 track_album = getattr(track, 'album', '')
                 
                 # Center the text vertically
-                empty_lines = (height - 5) // 2
+                visible_height = max(6, height - 1)
+                empty_lines = (visible_height - 5) // 2
                 for _ in range(max(0, empty_lines)):
                     text.append("\n")
                 
@@ -262,7 +263,8 @@ class TerminalUI:
                 else:
                     text.append("  \u25b8 No lyrics found \u25c0\n", style="yellow")
             else:
-                empty_lines = (height - 1) // 2
+                visible_height = max(2, height - 1)
+                empty_lines = (visible_height - 1) // 2
                 for _ in range(max(0, empty_lines)):
                     text.append("\n")
                 text.append("  \u25b8 Waiting for Spotify... \u25c0\n", style="yellow")
@@ -372,7 +374,9 @@ class TerminalUI:
             big_lines = render_big(display_text, width - 4)
 
         total_height = len(big_lines)
-        pad_top = max(0, (height - total_height) // 2)
+        # Subtract 1 line for shell prompt / status bar overhead
+        visible_height = max(total_height + 1, height - 1)
+        pad_top = max(0, (visible_height - total_height) // 2)
 
         for _ in range(pad_top):
             text.append(" " * width + "\n", style=self._color)
@@ -383,7 +387,7 @@ class TerminalUI:
             pad_right = max(0, width - pad_left - line_width)
             text.append(" " * pad_left + line + " " * pad_right + "\n", style=self._color)
 
-        remaining = max(0, height - pad_top - total_height)
+        remaining = max(0, visible_height - pad_top - total_height)
         for _ in range(remaining):
             text.append(" " * width + "\n", style=self._color)
 
