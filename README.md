@@ -10,7 +10,7 @@
 
 ## Preview
 
-https://github.com/user-attachments/assets/7f05f064-9953-42f6-b671-ca279f6d5e90
+https://github.com/user-attachments/assets/5d60361a-55e7-4fc6-a1f0-a1ad8985b451
 
 ---
 
