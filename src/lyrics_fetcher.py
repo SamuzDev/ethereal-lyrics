@@ -721,6 +721,10 @@ class MusixmatchProvider(LyricsProvider):
         if not macro:
             return None
 
+        # Check if macro is a dict (not a string or other type)
+        if not isinstance(macro, dict):
+            return None
+
         # Check for token exhaustion
         status = self._deep_find(macro, "status_code")
         if status == 401:
@@ -728,11 +732,19 @@ class MusixmatchProvider(LyricsProvider):
 
         # Get matched track
         calls = macro.get("message", {}).get("body", {}).get("macro_calls", {})
+        if not isinstance(calls, dict):
+            return None
         matcher_calls = calls.get("matcher.track.get", {})
         if not isinstance(matcher_calls, dict):
             return None
-        matcher_track = matcher_calls.get("message", {}).get("body", {}).get("track", {})
-        if not matcher_track or not self._is_trusted_match(matcher_track, track_name, artist_name, duration_s):
+        message = matcher_calls.get("message", {})
+        if not isinstance(message, dict):
+            return None
+        body = message.get("body", {})
+        if not isinstance(body, dict):
+            return None
+        matcher_track = body.get("track", {})
+        if not matcher_track or not isinstance(matcher_track, dict) or not self._is_trusted_match(matcher_track, track_name, artist_name, duration_s):
             return None
 
         ctid = matcher_track.get("commontrack_id")
