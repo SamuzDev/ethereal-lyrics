@@ -5,6 +5,8 @@ import os
 import time
 import signal
 import atexit
+import tty
+import termios
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
@@ -70,36 +72,70 @@ class EtherealLyrics:
         self._current_lyrics: Lyrics | None = None
         self._last_progress_ms: int = 0
         self._running = True
+        self._term_fd = sys.stdin.fileno()
+        self._term_settings = None
+        self._is_tty = os.isatty(self._term_fd)
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+        atexit.register(self._restore_terminal)
+
+    def _setup_terminal(self) -> None:
+        """Set terminal to cbreak mode for single-keystroke reading."""
+        if not self._is_tty:
+            return
+        try:
+            self._term_settings = termios.tcgetattr(self._term_fd)
+            tty.setcbreak(self._term_fd)
+        except (termios.error, OSError):
+            self._is_tty = False
+            self._term_settings = None
+
+    def _restore_terminal(self) -> None:
+        """Restore terminal to original settings."""
+        if self._is_tty and self._term_settings is not None:
+            try:
+                termios.tcsetattr(self._term_fd, termios.TCSADRAIN, self._term_settings)
+            except (OSError, IOError):
+                pass
 
     def _signal_handler(self, signum: int, frame) -> None:
         self._running = False
         self.ui.stop()
+        self._restore_terminal()
 
     def _check_keypress(self) -> str | None:
         """Check for keypress without blocking."""
-        # Try stdin first (works with piped input)
-        fd = sys.stdin.fileno()
+        if self._is_tty:
+            # In cbreak mode - read from stdin directly
+            try:
+                import select
+                r, _, _ = select.select([self._term_fd], [], [], 0)
+                if r:
+                    data = os.read(self._term_fd, 1)
+                    return data.decode('utf-8', errors='ignore') if data else None
+            except (OSError, IOError, ValueError):
+                pass
+            return None
+
+        # Fallback for non-TTY: try stdin then /dev/tty
         try:
             import select
-            r, _, _ = select.select([fd], [], [], 0)
+            r, _, _ = select.select([self._term_fd], [], [], 0)
             if r:
-                data = os.read(fd, 1)
+                data = os.read(self._term_fd, 1)
                 return data.decode('utf-8', errors='ignore') if data else None
         except (OSError, IOError, ValueError):
             pass
 
-        # Fallback: read directly from /dev/tty (works in raw terminal mode like nvim/cava)
+        # Fallback: read directly from /dev/tty
         try:
             tty_fd = os.open("/dev/tty", os.O_RDONLY)
             try:
-                # Make it non-blocking
                 import fcntl
                 flags = fcntl.fcntl(tty_fd, fcntl.F_GETFL)
                 fcntl.fcntl(tty_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-                
+
                 r, _, _ = select.select([tty_fd], [], [], 0)
                 if r:
                     data = os.read(tty_fd, 1)
@@ -122,6 +158,7 @@ class EtherealLyrics:
         )
 
     def run(self):
+        self._setup_terminal()
         self.ui.console.clear()
 
         while self._running:
@@ -248,6 +285,7 @@ class EtherealLyrics:
 
         self.ui.stop()
         self.ui.console.clear()
+        self._restore_terminal()
 
 
 def show_lyrics_debug():
