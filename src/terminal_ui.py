@@ -239,8 +239,33 @@ class TerminalUI:
         width, height = self.console.size
 
         if lyrics is None or not lyrics or not hasattr(lyrics, 'lines'):
-            for _ in range(height):
-                text.append(" " * width + "\n", style=self._color)
+            # Show track info and "no lyrics" message instead of blank space
+            if track:
+                track_name = getattr(track, 'name', 'Unknown Track')
+                track_artist = getattr(track, 'artists', 'Unknown Artist')
+                track_album = getattr(track, 'album', '')
+                
+                # Center the text vertically
+                empty_lines = (height - 5) // 2
+                for _ in range(max(0, empty_lines)):
+                    text.append("\n")
+                
+                text.append(f"  {track_name}\n", style="bold " + self._color)
+                text.append(f"  {track_artist}\n", style=self._color)
+                if track_album:
+                    text.append(f"  {track_album}\n", style="dim " + self._color)
+                text.append("\n", style=self._color)
+                text.append("  \u25b8 No lyrics found \u25c0\n", style="yellow")
+            else:
+                empty_lines = (height - 1) // 2
+                for _ in range(max(0, empty_lines)):
+                    text.append("\n")
+                text.append("  \u25b8 Waiting for Spotify... \u25c0\n", style="yellow")
+            
+            # Fill remaining lines
+            current_lines = len(text.plain.split("\n")) - 1
+            for _ in range(max(0, height - current_lines)):
+                text.append("\n")
             return text
 
         lines = lyrics.lines

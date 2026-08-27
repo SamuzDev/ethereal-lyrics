@@ -368,6 +368,14 @@ class LRCLibProvider(LyricsProvider):
     def _fuzzy_match(self, a: str, b: str, threshold: float = 0.6) -> bool:
         return SequenceMatcher(None, self._normalize(a), self._normalize(b)).ratio() >= threshold
 
+    def _fuzzy_match_track_artist(self, track_a: str, artist_a: str, track_b: str, artist_b: str, threshold: float = 0.7) -> bool:
+        """Match both track name and artist name for better accuracy."""
+        track_match = SequenceMatcher(None, self._normalize(track_a), self._normalize(track_b)).ratio()
+        artist_match = SequenceMatcher(None, self._normalize(artist_a), self._normalize(artist_b)).ratio()
+        # Require both to match well, with track being more important
+        combined = (track_match * 0.7) + (artist_match * 0.3)
+        return combined >= threshold
+
     def fetch(
         self,
         track_name: str,
@@ -404,7 +412,10 @@ class LRCLibProvider(LyricsProvider):
             if response.status_code == 200:
                 results = response.json()
                 for item in results:
-                    if self._fuzzy_match(item.get("trackName", ""), track_name):
+                    if self._fuzzy_match_track_artist(
+                        item.get("trackName", ""), item.get("artistName", ""),
+                        track_name, artist_name
+                    ):
                         result = self._parse_response(
                             item, track_name, artist_name, album_name
                         )
@@ -495,7 +506,10 @@ class MusixmatchProvider(LyricsProvider):
                 text = response.text
                 if text.lstrip().startswith("<"):
                     return None
-                return json.loads(text)
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError:
+                    return None
         except (httpx.HTTPError, json.JSONDecodeError):
             pass
         return None
