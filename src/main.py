@@ -226,10 +226,15 @@ class EtherealLyrics:
                     self._last_progress_ms = progress_ms
                 else:
                     self._last_progress_ms = progress_ms
-
+ 
                 if track_id:
                     self.lyrics_fetcher.update_timing(track_id, progress_ms)
-
+ 
+                # Ensure lyrics is a Lyrics object or None
+                if self._current_lyrics is not None and not hasattr(self._current_lyrics, 'lines'):
+                    self.ui.print_error(f"Invalid lyrics object: {type(self._current_lyrics)}")
+                    self._current_lyrics = None
+ 
                 self.ui.render(render_track, self._current_lyrics)
                 time.sleep(0.05)
 
@@ -276,7 +281,7 @@ def show_lyrics_debug():
         track_id=track.track_id,
     )
 
-    if not lyrics:
+    if not lyrics or not hasattr(lyrics, 'lines'):
         print("  \u2717 No lyrics found")
         return
 

@@ -206,6 +206,9 @@ class TerminalUI:
     ) -> int:
         if not lines:
             return -1
+ 
+        if not hasattr(lyrics, 'get_effective_offset'):
+            return -1
 
         if is_synced:
             offset = self._offset_ms
@@ -235,7 +238,7 @@ class TerminalUI:
 
         width, height = self.console.size
 
-        if lyrics is None or not lyrics:
+        if lyrics is None or not lyrics or not hasattr(lyrics, 'lines'):
             for _ in range(height):
                 text.append(" " * width + "\n", style=self._color)
             return text
